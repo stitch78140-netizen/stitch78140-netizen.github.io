@@ -1,6 +1,7 @@
 {
   "name": "Civils D\u00e9plac\u00e9s v6",
   "short_name": "Civils v6",
+  "x_version": "frises-1",
   "description": "DMJ accumulation, Amin break-only, mapping HSD/HDM, cr\u00e9dit RCJ/RL",
   "theme_color": "#0ea5e9",
   "background_color": "#ffffff",
