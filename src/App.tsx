@@ -1,463 +1,298 @@
-import React, { useMemo, useState, useEffect } from "react";
-import {
-  compute,
-  DayType,
-  computeAccountingDate,
-  dayTypeFromAccountingDate,
-} from "./modules/civils";
+import { useMemo, useState } from "react";
+import { compute, addMin, isFullNightHour, type DayType } from "./modules/civils";
 
-/* ============ Helpers ============ */
-const pad = (n: number) => String(n).padStart(2, "0");
+// ------- helpers UI -------
+const fmtHM = (d?: Date) => d ? `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` : "";
+const fmtHhmm = (m: number) => {
+  const h = Math.floor(Math.max(0,m)/60), mm = Math.max(0,m)%60;
+  return `${String(h).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+};
+const bold = (s: React.ReactNode)=> <span style={{fontWeight:700}}>{s}</span>;
+const card: React.CSSProperties = { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:12 };
+const row3: React.CSSProperties = { display:"grid", gridTemplateColumns:"auto 6px 1fr", rowGap:6 };
 
-function addMinutes(d: Date, m: number) { return new Date(d.getTime() + m * 60000); }
-function asHM(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
-function asHMstrict(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
+// --------- inputs ----------
+type TimePair = { date?: Date; time?: string };
+type Range = { date?: Date; start?: string; end?: string };
 
-function formatTypingHHMM(raw: string): string {
-  const d = raw.replace(/[^\d]/g, "").slice(0, 4);
-  if (d.length <= 2) return d;
-  return d.slice(0, 2) + ":" + d.slice(2);
-}
-function finalizeHHMM(raw: string): string {
-  const d = raw.replace(/[^\d]/g, "");
-  if (d.length === 0) return "";
-  let h = 0, m = 0;
-  if (d.length === 1) { h = Number(d); m = 0; }
-  else if (d.length === 2) { h = Number(d); m = 0; }
-  else if (d.length === 3) { h = Number(d.slice(0,2)); m = Number("0"+d.slice(2)); }
-  else { h = Number(d.slice(0,2)); m = Number(d.slice(2,4)); }
-  if (h > 23) h = 23;
-  if (m > 59) m = 59;
-  return `${pad(h)}:${pad(m)}`;
-}
-function isValidHHMM(v: string) {
-  const m = /^(\d{2}):(\d{2})$/.exec(v);
-  if (!m) return false;
-  const h = +m[1], mm = +m[2];
-  return h >= 0 && h <= 23 && mm >= 0 && mm <= 59;
-}
+export default function App(){
+  // PDS/FDS
+  const [pds, setPds] = useState<TimePair>({});
+  const [fds, setFds] = useState<TimePair>({});
+  // coupure & repas
+  const [cut, setCut] = useState<Range>({});
+  const [noon, setNoon] = useState<Range>({});
+  const [eve , setEve ] = useState<Range>({});
 
-function plus1hLabel(dateISO: string, hhmm: string, fallbackDateISO?: string) {
-  const useDate = dateISO || fallbackDateISO || "";
-  if (!useDate || !isValidHHMM(hhmm)) return "";
-  const [h, m] = hhmm.split(":").map(Number);
-  const d = new Date(`${useDate}T${pad(h)}:${pad(m)}`);
-  const e = addMinutes(d, 60);
-  return `${pad(e.getHours())}:${pad(e.getMinutes())}`;
-}
+  // ----- setters & auto-date pour coupure/repas -----
+  const autoDate = (d?: Date) => d ?? pds.date ?? fds.date;
 
-function fmtSmart(d: Date, refStart?: Date, refEnd?: Date) {
-  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const sd = refStart ? refStart.toDateString() : "";
-  const ed = refEnd ? refEnd.toDateString() : "";
-  const same = d.toDateString() === sd || d.toDateString() === ed;
-  if (same) return <strong>{hm}</strong>;
-  return <>{pad(d.getDate())}/{pad(d.getMonth()+1)}/{d.getFullYear()} <strong>{hm}</strong></>;
-}
+  // effacer tout
+  const resetAll = () => { setPds({}); setFds({}); setCut({}); setNoon({}); setEve({}); }
 
-/* ============ App ============ */
-export default function App() {
-  const [startDate, setStartDate] = useState<string>("");
-  const [startTime, setStartTime] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
-  const [endTime, setEndTime] = useState<string>("");
+  // --------- calculs ----------
+  // bâtit un Date à partir (date + "HH:MM")
+  const withTime = (date?: Date, hhmm?: string) => {
+    if(!date || !hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return undefined;
+    const d = new Date(date); const [h,m] = hhmm.split(":").map(Number); d.setHours(h,m,0,0); return d;
+  };
 
-  const [breakDate, setBreakDate] = useState<string>("");
-  const [breakStartTime, setBreakStartTime] = useState<string>("");
-  const [breakEndTime, setBreakEndTime] = useState<string>("");
-
-  const [noonDate, setNoonDate] = useState<string>("");
-  const [noonStart, setNoonStart] = useState<string>("");
-  const [eveDate, setEveDate] = useState<string>("");
-  const [eveStart, setEveStart] = useState<string>("");
-
-  const [dayType, setDayType] = useState<DayType>("SO");
-
-  const startDT = useMemo(() => {
-    if (!startDate || !isValidHHMM(startTime)) return null;
-    const [h,m] = startTime.split(":").map(Number);
-    return new Date(`${startDate}T${pad(h)}:${pad(m)}`);
-  }, [startDate, startTime]);
-
-  const endDT = useMemo(() => {
-    if (!endDate || !isValidHHMM(endTime)) return null;
-    const [h,m] = endTime.split(":").map(Number);
-    return new Date(`${endDate}T${pad(h)}:${pad(m)}`);
-  }, [endDate, endTime]);
-
-  const breakStartDT = useMemo(() => {
-    const dISO = breakDate || startDate;
-    if (!dISO || !isValidHHMM(breakStartTime)) return null;
-    const [h,m] = breakStartTime.split(":").map(Number);
-    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
-  }, [breakDate, breakStartTime, startDate]);
-
-  const breakEndDT = useMemo(() => {
-    const dISO = breakDate || startDate;
-    if (!dISO || !isValidHHMM(breakEndTime)) return null;
-    const [h,m] = breakEndTime.split(":").map(Number);
-    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
-  }, [breakDate, breakEndTime, startDate]);
-
-  const noonStartDT = useMemo(() => {
-    const dISO = noonDate || startDate;
-    if (!dISO || !isValidHHMM(noonStart)) return null;
-    const [h,m] = noonStart.split(":").map(Number);
-    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
-  }, [noonDate, noonStart, startDate]);
-
-  const eveStartDT = useMemo(() => {
-    const dISO = eveDate || startDate;
-    if (!dISO || !isValidHHMM(eveStart)) return null;
-    const [h,m] = eveStart.split(":").map(Number);
-    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
-  }, [eveDate, eveStart, startDate]);
-
-  useEffect(() => {
-    if (!startDT || !endDT) return;
-    const meals: Array<{start:Date; end:Date}> = [];
-    if (noonStartDT) meals.push({ start: noonStartDT, end: addMinutes(noonStartDT, 60) });
-    if (eveStartDT)  meals.push({ start: eveStartDT,  end: addMinutes(eveStartDT,  60) });
-    const breaks = (breakStartDT && breakEndDT) ? [{ start: breakStartDT, end: breakEndDT }] : [];
-    const acc = computeAccountingDate(startDT, endDT, meals, breaks);
-    setDayType(dayTypeFromAccountingDate(acc));
-  }, [startDT, endDT, noonStartDT, eveStartDT, breakStartDT, breakEndDT]);
+  // Jours TSR auto (simple): on prend le jour civil de la DMJ (clairement défini par la règle); puis:
+  // Samedi => "R", Dimanche => "RH", sinon "SO".
+  const draftStart = withTime(pds.date, pds.time);
+  const draftEnd   = withTime(fds.date, fds.time);
+  // pauses
+  const mealNoon = (noon.start && !noon.end) ? {start: withTime(autoDate(noon.date), noon.start), end: addMin(withTime(autoDate(noon.date), noon.start)!, 60)} :
+                    (noon.start && noon.end) ? {start: withTime(autoDate(noon.date), noon.start), end: withTime(autoDate(noon.date), noon.end)} : undefined;
+  const mealEve  = (eve.start && !eve.end) ? {start: withTime(autoDate(eve.date), eve.start), end: addMin(withTime(autoDate(eve.date), eve.start)!, 60)} :
+                    (eve.start && eve.end) ? {start: withTime(autoDate(eve.date), eve.start), end: withTime(autoDate(eve.date), eve.end)} : undefined;
+  const theBreak = (cut.start && cut.end) ? { start: withTime(autoDate(cut.date), cut.start), end: withTime(autoDate(cut.date), cut.end) } : undefined;
 
   const out = useMemo(() => {
-    if (!startDT || !endDT) return null;
-    return compute({
-      date: startDT,
-      start: startDT,
-      end: endDT,
-      theBreak: breakStartDT && breakEndDT ? { start: breakStartDT, end: breakEndDT } : undefined,
-      mealNoon:   noonStartDT ? { start: noonStartDT, end: addMinutes(noonStartDT,60) } : undefined,
-      mealEvening: eveStartDT ? { start: eveStartDT,  end: addMinutes(eveStartDT, 60) } : undefined,
-      dayType,
+    if(!draftStart || !draftEnd) return null;
+
+    // DMJ provisoire pour déterminer le TSR/jour
+    const tmp = compute({
+      start: draftStart, end: draftEnd,
+      mealNoon, mealEvening: mealEve, theBreak,
+      dayType: "SO"
     });
-  }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, eveStartDT, dayType]);
+    const dmjDay = new Date(tmp.dmjEnd); const wd = dmjDay.getDay();
+    const dayType: DayType = wd===6 ? "R" : wd===0 ? "RH" : "SO";
 
-  const HS_label  = dayType === "RH" ? "HSD" : "HS";
-  const HSM_label = dayType === "RH" ? "HDM" : "HSM";
-  const factor    = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
+    return compute({
+      start: draftStart, end: draftEnd,
+      mealNoon, mealEvening: mealEve, theBreak,
+      dayType
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(pds), JSON.stringify(fds), JSON.stringify(cut), JSON.stringify(noon), JSON.stringify(eve)]);
 
-  const nonMaj = out ? Math.min(out.A_hours, out.B_total_h) : 0;
-  const maj    = out ? Math.max(0, out.B_total_h - nonMaj) : 0;
+  // infos d'affichage
+  const dayType: DayType = useMemo(()=>{
+    if(!out) return "SO";
+    const wd = new Date(out.dmjEnd).getDay();
+    return wd===6 ? "R" : wd===0 ? "RH" : "SO";
+  }, [out]);
 
-  const cmp = out
-    ? (out.Amin_min % 60) > (out.Bmin_min % 60) ? ">" :
-      (out.Amin_min % 60) < (out.Bmin_min % 60) ? "<" : "="
-    : "=";
+  const nonMaj = out ? Math.min(out.A_hours, out.B_total_h) : 0; // A
+  const reste  = out ? Math.max(0, out.B_total_h - nonMaj) : 0;  // B arrondi - A
 
-  /* ============ Styles mobile-first ============ */
-  const box: React.CSSProperties  = { margin: "16px auto", maxWidth: 900, padding: 16, fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
-  const card: React.CSSProperties = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 };
-  const row3: React.CSSProperties = { display: "grid", gridTemplateColumns: "auto 1fr", gap: 6 };
-  const btn: React.CSSProperties  = { padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" };
-  const labelCol: React.CSSProperties = { fontWeight: 500, marginBottom: 6 };
-
-  const dateRow: React.CSSProperties = { display: "block", width: "100%", marginBottom: 6 };
-  const timesRow2: React.CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: "minmax(6.2em,1fr) minmax(2em,auto) minmax(6.2em,1fr)",
-    gap: 8, alignItems: "center", width: "100%",
-  };
-  const timesRow1pair: React.CSSProperties = {
-    display: "grid",
-    gridTemplateColumns: "minmax(6.2em,1fr) minmax(6.2em,1fr)",
-    gap: 8, alignItems: "center", width: "100%",
-  };
-
-  const inputBase: React.CSSProperties   = { width: "100%", minWidth: 0, boxSizing: "border-box", fontSize: 16, padding: "8px 10px", textAlign: "center" };
-  const sep: React.CSSProperties         = { textAlign: "center", opacity: 0.6 };
-
-  function clearAll() {
-    setStartDate(""); setStartTime("");
-    setEndDate(""); setEndTime("");
-    setBreakDate(""); setBreakStartTime(""); setBreakEndTime("");
-    setNoonDate(""); setNoonStart("");
-    setEveDate(""); setEveStart("");
-    setDayType("SO");
-  }
+  // facteurs de majoration (heures créditées)
+  const factor = (t: DayType) => t==="SO" ? 1.5 : t==="R" ? 2 : 3;
 
   return (
-    <div style={box}>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
-        <button style={btn} onClick={clearAll}>Tout effacer</button>
-      </div>
+    <div style={{maxWidth:740, margin:"0 auto", padding:"12px 12px 64px"}}>
+      {/* ENTREE */}
+      <div style={{...card}}>
+        <div style={{fontSize:20, fontWeight:700, marginBottom:8}}>Calcul heures</div>
 
-      {/* --- Formulaire (mobile-first) --- */}
-      <div style={{ ...card, display: "grid", gap: 12 }}>
-        <div>
-          <div style={labelCol}>Prise de service</div>
-          <div style={dateRow}>
-            <input style={inputBase} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
-          </div>
-          <div style={timesRow1pair}>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={startTime}
-              onChange={e=>setStartTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>setStartTime(finalizeHHMM(e.target.value))}
-            />
-            <div />
-          </div>
+        {/* PDS */}
+        <div style={{marginTop:8}}>Prise de service</div>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 120px", gap:8}}>
+          <input type="date" value={pds.date? pds.date.toISOString().slice(0,10): ""} onChange={e=>setPds(s=>({...s, date:e.target.value? new Date(e.target.value+"T00:00:00"):undefined}))}/>
+          <input inputMode="numeric" placeholder="HH:MM" value={pds.time??""}
+                 onChange={e=>setPds(s=>({...s, time: sanitizeHM(e.target.value)}))}/>
         </div>
 
-        <div>
-          <div style={labelCol}>Fin de service</div>
-          <div style={dateRow}>
-            <input style={inputBase} type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} />
-          </div>
-          <div style={timesRow1pair}>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={endTime}
-              onChange={e=>setEndTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>setEndTime(finalizeHHMM(e.target.value))}
-            />
-            <div />
-          </div>
+        {/* FDS */}
+        <div style={{marginTop:12}}>Fin de service</div>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 120px", gap:8}}>
+          <input type="date" value={fds.date? fds.date.toISOString().slice(0,10): ""} onChange={e=>setFds(s=>({...s, date:e.target.value? new Date(e.target.value+"T00:00:00"):undefined}))}/>
+          <input inputMode="numeric" placeholder="HH:MM" value={fds.time??""}
+                 onChange={e=>setFds(s=>({...s, time: sanitizeHM(e.target.value)}))}/>
         </div>
 
-        <div>
-          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>Coupure</span>
-            <button style={btn} onClick={()=>{ setBreakDate(""); setBreakStartTime(""); setBreakEndTime(""); }}>Effacer</button>
-          </div>
-          <div style={dateRow}>
-            <input style={inputBase} type="date" value={breakDate} onChange={e=>setBreakDate(e.target.value)} />
-          </div>
-          <div style={timesRow2}>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={breakStartTime}
-              onChange={e=>setBreakStartTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{
-                const v = finalizeHHMM(e.target.value);
-                setBreakStartTime(v);
-                if (!breakDate && startDate && v) setBreakDate(startDate);
-              }}
-            />
-            <div style={sep}>–</div>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={breakEndTime}
-              onChange={e=>setBreakEndTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{
-                const v = finalizeHHMM(e.target.value);
-                setBreakEndTime(v);
-                if (!breakDate && startDate && v) setBreakDate(startDate);
-              }}
-            />
-          </div>
+        {/* Coupure */}
+        <div style={{marginTop:12, display:"grid", gridTemplateColumns:"1fr 120px 16px 120px", gap:8, alignItems:"center"}}>
+          <div>Coupure</div>
+          <input inputMode="numeric" placeholder="HH:MM" value={cut.start??""} onChange={e=>setCut(s=>({...s, date: autoDate(s.date), start: sanitizeHM(e.target.value)}))}/>
+          <div style={{textAlign:"center"}}>–</div>
+          <input inputMode="numeric" placeholder="HH:MM" value={cut.end??""} onChange={e=>setCut(s=>({...s, date: autoDate(s.date), end: sanitizeHM(e.target.value)}))}/>
+        </div>
+        <div style={{marginTop:6}}>
+          <button onClick={()=>setCut({})}>Effacer</button>
         </div>
 
-        <div>
-          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>Repas méridien</span>
-            <button style={btn} onClick={()=>{ setNoonDate(""); setNoonStart(""); }}>Effacer</button>
-          </div>
-          <div style={dateRow}>
-            <input style={inputBase} type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} />
-          </div>
-          <div style={timesRow1pair}>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={noonStart}
-              onChange={e=>setNoonStart(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{
-                const v = finalizeHHMM(e.target.value);
-                setNoonStart(v);
-                if (!noonDate && startDate && v) setNoonDate(startDate);
-              }}
-            />
-            <input style={inputBase} value={plus1hLabel(noonDate, noonStart, startDate)} readOnly />
-          </div>
+        {/* Repas midi */}
+        <div style={{marginTop:12}}>Repas méridien (fin auto +1h si fin vide)</div>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 120px 120px", gap:8}}>
+          <div/>
+          <input inputMode="numeric" placeholder="HH:MM" value={noon.start??""} onChange={e=>setNoon(s=>({...s, date:autoDate(s.date), start:sanitizeHM(e.target.value)}))}/>
+          <input inputMode="numeric" placeholder="HH:MM" value={noon.end??""}   onChange={e=>setNoon(s=>({...s, date:autoDate(s.date), end  :sanitizeHM(e.target.value)}))}/>
+        </div>
+        <div style={{marginTop:6}}>
+          <button onClick={()=>setNoon({})}>Effacer</button>
         </div>
 
-        <div>
-          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>Repas vespéral</span>
-            <button style={btn} onClick={()=>{ setEveDate(""); setEveStart(""); }}>Effacer</button>
-          </div>
-          <div style={dateRow}>
-            <input style={inputBase} type="date" value={eveDate} onChange={e=>setEveDate(e.target.value)} />
-          </div>
-          <div style={timesRow1pair}>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={eveStart}
-              onChange={e=>setEveStart(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{
-                const v = finalizeHHMM(e.target.value);
-                setEveStart(v);
-                if (!eveDate && startDate && v) setEveDate(startDate);
-              }}
-            />
-            <input style={inputBase} value={plus1hLabel(eveDate, eveStart, startDate)} readOnly />
-          </div>
+        {/* Repas soir */}
+        <div style={{marginTop:12}}>Repas vespéral (fin auto +1h si fin vide)</div>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 120px 120px", gap:8}}>
+          <div/>
+          <input inputMode="numeric" placeholder="HH:MM" value={eve.start??""} onChange={e=>setEve(s=>({...s, date:autoDate(s.date), start:sanitizeHM(e.target.value)}))}/>
+          <input inputMode="numeric" placeholder="HH:MM" value={eve.end??""}   onChange={e=>setEve(s=>({...s, date:autoDate(s.date), end  :sanitizeHM(e.target.value)}))}/>
+        </div>
+        <div style={{marginTop:6, display:"flex", gap:8, justifyContent:"space-between"}}>
+          <div> </div>
+          <button onClick={()=>setEve({})}>Effacer</button>
+        </div>
+
+        <div style={{textAlign:"right", marginTop:12}}>
+          <button onClick={resetAll}>Tout effacer</button>
         </div>
       </div>
 
-      {/* TSr */}
+      {/* RESULTATS */}
       {out && (
-        <div style={{ ...card, marginTop: 12 }}>
-          Tsr : <strong>{dayType}</strong> {dayType === "SO" ? "(Lun–Ven)" : dayType === "R" ? "(Samedi)" : "(Dimanche)"}
-        </div>
-      )}
+        <>
+          <div style={{...card, marginTop:12}}>
+            <div style={row3}>
+              <div>DMJ atteinte à</div><div/>
+              <div>{bold(fmtHM(out.dmjEnd))}</div>
 
-      {/* Repères */}
-      {out && (
-        <div style={{ ...card, marginTop: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div>DMJ atteinte à</div>
-            <div>{fmtSmart(out.dmjEnd, startDT!, endDT!)}</div>
-            <div>Amplitude atteinte à</div>
-            <div>{fmtSmart(out.t13, startDT!, endDT!)}</div>
-            <div>Dépassement total</div>
-            <div>
-              {asHM(out.Bmin_min)} → <strong style={{color:"#b91c1c"}}>{asHMstrict(out.B_total_h*60)}</strong>
+              <div>Amplitude atteinte à</div><div/>
+              <div>{bold(fmtHM(out.t13))}</div>
+
+              <div>Dépassement total</div><div/>
+              <div>{fmtHhmm(out.Bmin_min)} → <span style={{color:"#b91c1c", fontWeight:700}}>{fmtHhmm(out.B_total_h*60)}</span></div>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Amin / Bmin */}
-      {out && (
-        <div style={{ ...card, marginTop: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div>Amin</div>
-            <div>{Math.floor(out.Amin_min/60)} h <strong>{pad(out.Amin_min%60)}</strong></div>
-            <div>Bmin</div>
-            <div>{Math.floor(out.Bmin_min/60)} h <strong>{pad(out.Bmin_min%60)}</strong></div>
-          </div>
-          <div style={{ marginTop: 8, textAlign: "center", fontSize: 18 }}>
-            Amin {cmp} Bmin
-          </div>
-        </div>
-      )}
+          <div style={{...card, marginTop:12}}>
+            <div style={row3}>
+              <div>Amin</div><div/>
+              <div>{Math.floor(out.Amin_min/60)} h {bold(String(out.Amin_min%60).padStart(2,"0"))}</div>
 
-      {/* Ventilation / Répartition */}
-      {out && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>Bmin</div><div/>
+              <div>{Math.floor(out.Bmin_min/60)} h {bold(String(out.Bmin_min%60).padStart(2,"0"))}</div>
+
+              <div style={{gridColumn:"1 / span 3", textAlign:"center", marginTop:6}}>
+                {out.Amin_min%60 === out.Bmin_min%60 ? "Amin = Bmin" : (out.Amin_min%60 > out.Bmin_min%60 ? "Amin > Bmin" : "Amin < Bmin")}
+              </div>
+            </div>
+          </div>
+
+          {/* Ventilation / Répartition (heures créditées) */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div style={{ ...card, marginTop: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 8 }}>Ventilation des heures</div>
-              <div style={row3}>
-                <div>{nonMaj} {HS_label}</div><div />
-                {maj>0 && (<><div>1 HS × {factor*100}% soit</div><div>{maj} {HSM_label} ({dayType})</div></>)}
-              </div>
+              <ul style={{margin:0,paddingLeft:16,lineHeight:"1.7em"}}>
+                {out.HS  >0 && <li>{out.HS} HS</li>}
+                {out.HSN >0 && <li>{out.HSN} HSN</li>}
+                {(out.HSM>0 || out.HNM>0) && <li style={{listStyle:"none",margin:"6px 0",borderTop:"1px dashed #e5e7eb"}}/>}
+                {out.HSM>0 && (
+                  <li>
+                    {out.HSM} HS × {(dayType==="SO"?150:dayType==="R"?200:300)}% → {(out.HSM*factor(dayType)).toLocaleString("fr-FR")} {(dayType==="RH" ? "HDM" : "HSM")}
+                  </li>
+                )}
+                {out.HNM>0 && (
+                  <li>
+                    {out.HNM} HSN × {(dayType==="SO"?150:dayType==="R"?200:300)}% → {(out.HNM*factor(dayType)).toLocaleString("fr-FR")} HNM
+                  </li>
+                )}
+              </ul>
             </div>
 
             <div style={{ ...card, marginTop: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 8 }}>Répartition des heures</div>
-              <div style={row3}>
-                <div>{nonMaj} {HS_label}</div><div />
-                {maj>0 && (<><div>{maj} {HSM_label}</div><div /></>)}
-              </div>
+              <ul style={{margin:0,paddingLeft:16,lineHeight:"1.7em"}}>
+                <li>{out.HS + out.HSN} {(dayType==="RH"?"HSD":"HS")}{out.HSN>0?" (dont nuit)":""}</li>
+                {(out.HSM+out.HNM)>0 && (
+                  <li>
+                    {((out.HSM+out.HNM)*factor(dayType)).toLocaleString("fr-FR")} {(dayType==="RH"?"HDM":"HSM")} au total
+                    {out.HSM>0 && <> — {(out.HSM*factor(dayType)).toLocaleString("fr-FR")} jour</>}
+                    {out.HNM>0 && <> — {(out.HNM*factor(dayType)).toLocaleString("fr-FR")} nuit</>}
+                  </li>
+                )}
+              </ul>
+
               <div style={{ marginTop: 8, color: "#b91c1c", fontWeight: 600 }}>
                 {dayType === "R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
                 {dayType === "RH" && "Crédit de 1,5 RCJ ou 2 RCJ + 1 RL au titre du DP sur le RH"}
               </div>
             </div>
-        </div>
-      )}
+          </div>
 
-      {/* --- Frises repliables --- */}
-      {out && startDT && endDT && (
-        <div style={{ ...card, marginTop: 12 }}>
-          <details>
-            <summary style={{ cursor:"pointer", fontWeight:600 }}>Explications (frises)</summary>
-            <div style={{ marginTop: 12 }}>
-              <Frises
-                dmj={out.dmjEnd}
-                t13={out.t13}
-                end={endDT}
-                nonMajHours={nonMaj}
-                majHours={maj}
-              />
-              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-                Légende : <span style={{background:"#e5e7eb",padding:"2px 6px",borderRadius:4}}>HS</span> /
-                <span style={{background:"#c7d2fe",padding:"2px 6px",borderRadius:4,marginLeft:6}}>HSN</span> /
-                <span style={{background:"#fecaca",padding:"2px 6px",borderRadius:4,marginLeft:6}}>HSM</span> /
-                <span style={{background:"#f5d0fe",padding:"2px 6px",borderRadius:4,marginLeft:6}}>HNM</span>
+          {/* Frises */}
+          <details style={{...card, marginTop:12}}>
+            <summary style={{cursor:"pointer"}}>Explications (frises)</summary>
+            <div style={{marginTop:12}}>
+              <Frises dmj={out.dmjEnd} t13={out.t13} nonMajHours={nonMaj} majHours={reste}/>
+              <div style={{marginTop:8, fontSize:12, color:"#6b7280"}}>
+                Lignes : haut = depuis la DMJ (heures de base) • bas = heures majorées (depuis l’amplitude 13h).  
+                Couleurs : gris/saumon = jour, bleu/rouge = nuit.
               </div>
             </div>
           </details>
-        </div>
+        </>
       )}
 
-      <div style={{opacity:0.6, fontSize:12, textAlign:"center", marginTop:16}}>
-        © Stitch08
-      </div>
+      <div style={{textAlign:"center", color:"#9ca3af", marginTop:16}}>© Stitch08</div>
     </div>
   );
 }
 
-/* ============ Frises (SVG simple) ============ */
-function isFullNightHour(s: Date, e: Date) {
-  // Une heure entière dans [21:00,06:00) => nuit
-  const spans: Array<{sd:Date; ed:Date}>=[]; const midnight = new Date(s); midnight.setHours(24,0,0,0);
-  if(e<=midnight) spans.push({sd:s,ed:e}); else { spans.push({sd:s,ed:midnight}); spans.push({sd:midnight,ed:e}); }
-  for(const sp of spans){
-    const d0 = new Date(sp.sd); d0.setHours(0,0,0,0);
-    const h06=new Date(d0); h06.setHours(6,0,0,0);
-    const h21=new Date(d0); h21.setHours(21,0,0,0);
-    const interStart = new Date(Math.max(sp.sd.getTime(), h06.getTime()));
-    const interEnd   = new Date(Math.min(sp.ed.getTime(), h21.getTime()));
-    if(interEnd>interStart) return false;
-  }
-  return true;
-}
+// -------- frises SVG (sans acronymes dans les titres) --------
+function Frises(props: { dmj: Date; t13: Date; nonMajHours: number; majHours: number; }) {
+  const cellW = 44, cellH = 18, padTop = 22;
+  const HH = (d: Date) => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 
-function Frises(props: { dmj: Date; t13: Date; end: Date; nonMajHours: number; majHours: number; }) {
-  const cellW = 32;  // largeur visuelle d’une heure
-  const cellH = 22;
+  const mkBlocks = (start: Date, n: number, nightColor: string, dayColor: string, borderNight: string, borderDay: string) =>
+    Array.from({length:n}).map((_, i) => {
+      const s = new Date(start.getTime() + i*60*60000);
+      const e = new Date(s.getTime() + 60*60000);
+      const night = isFullNightHour(s,e);
+      return { s, x:i*cellW, night, fill: night? nightColor: dayColor, stroke: night? borderNight: borderDay };
+    });
 
-  // Ligne 1 : HS/HSN depuis la DMJ (non maj)
-  const nonMajRects = Array.from({length: props.nonMajHours}).map((_, i) => {
-    const s = new Date(props.dmj.getTime() + i*60*60000);
-    const e = new Date(s.getTime() + 60*60000);
-    const night = isFullNightHour(s,e);
-    return (
-      <g key={`n-${i}`}>
-        <rect x={i*cellW} y={0} width={cellW-2} height={cellH} rx={4} ry={4}
-              fill={night ? "#c7d2fe" : "#e5e7eb"} stroke="#d1d5db"/>
-      </g>
-    );
-  });
+  const hs = mkBlocks(props.dmj, props.nonMajHours, "#c7d2fe", "#e5e7eb", "#93c5fd", "#d1d5db");
+  const mj = mkBlocks(props.t13, props.majHours,    "#ef4444", "#fecaca", "#dc2626", "#fca5a5");
 
-  // Ligne 2 : HSM/HNM depuis t13 (heures maj)
-  const majRects = Array.from({length: props.majHours}).map((_, i) => {
-    const s = new Date(props.t13.getTime() + i*60*60000);
-    const e = new Date(s.getTime() + 60*60000);
-    const night = isFullNightHour(s,e);
-    return (
-      <g key={`m-${i}`}>
-        <rect x={i*cellW} y={cellH+10} width={cellW-2} height={cellH} rx={4} ry={4}
-              fill={night ? "#f5d0fe" : "#fecaca"} stroke="#fecaca"/>
-      </g>
-    );
-  });
-
-  const totalW = Math.max(1, (props.nonMajHours>0?props.nonMajHours:0), (props.majHours>0?props.majHours:0)) * cellW;
+  const blocksW = Math.max(hs.length, mj.length) * cellW;
+  const totalW = Math.max(blocksW + 70, 6*cellW + 70);
+  const totalH = padTop + cellH + 28 + cellH + 10;
 
   return (
-    <svg width="100%" height={cellH*2+14} viewBox={`0 0 ${Math.max(totalW, cellW*6)} ${cellH*2+14}`} style={{ background: "transparent" }}>
-      {/* libellés à gauche */}
-      <text x="0" y={cellH-6} fontSize="12" fill="#374151">HS / HSN</text>
-      <g transform="translate(70,0)">
-        {nonMajRects}
+    <svg width="100%" height={totalH} viewBox={`0 0 ${totalW} ${totalH}`} style={{background:"transparent"}}>
+      <text x="0" y={14} fontSize="12" fill="#374151">Depuis la DMJ (heures de base)</text>
+      <text x="0" y={padTop + cellH + 26} fontSize="12" fill="#374151">Heures majorées (depuis l’amplitude 13h)</text>
+
+      <line x1={60} y1={padTop-6} x2={60+blocksW} y2={padTop-6} stroke="#9ca3af" strokeWidth="1"/>
+      <g transform={`translate(60,${padTop})`}>
+        {hs.map((b,i)=>(
+          <g key={`hs-${i}`}>
+            <rect x={b.x+1} y={0} width={cellW-2} height={cellH} rx={4} ry={4} fill={b.fill} stroke={b.stroke}/>
+            <line x1={b.x} y1={cellH+1} x2={b.x} y2={cellH+6} stroke="#9ca3af" strokeWidth="1"/>
+            <text x={b.x} y={cellH+16} fontSize="10" fill="#4b5563">{HH(b.s)}</text>
+          </g>
+        ))}
+        <line x1={hs.length*cellW} y1={cellH+1} x2={hs.length*cellW} y2={cellH+6} stroke="#9ca3af" strokeWidth="1"/>
       </g>
-      <text x="0" y={cellH*2+4} fontSize="12" fill="#374151">HSM / HNM</text>
-      <g transform="translate(70,0)">
-        {majRects}
+
+      <line x1={60} y1={padTop + cellH + 20} x2={60+blocksW} y2={padTop + cellH + 20} stroke="#9ca3af" strokeWidth="1"/>
+      <g transform={`translate(60,${padTop + cellH + 26})`}>
+        {mj.map((b,i)=>(
+          <g key={`mj-${i}`}>
+            <rect x={b.x+1} y={0} width={cellW-2} height={cellH} rx={4} ry={4} fill={b.fill} stroke={b.stroke}/>
+            <line x1={b.x} y1={cellH+1} x2={b.x} y2={cellH+6} stroke="#9ca3af" strokeWidth="1"/>
+            <text x={b.x} y={cellH+16} fontSize="10" fill="#4b5563">{HH(b.s)}</text>
+          </g>
+        ))}
+        <line x1={mj.length*cellW} y1={cellH+1} x2={mj.length*cellW} y2={cellH+6} stroke="#9ca3af" strokeWidth="1"/>
       </g>
     </svg>
   );
+}
+
+// --------- saisie HHMM -> HH:MM ---------
+function sanitizeHM(raw: string){
+  // autorise "750" -> 07:50, "7:5" -> 07:05, etc.
+  const s = raw.replace(/[^\d:]/g,"");
+  if(s.includes(":")){
+    const [h,m] = s.split(":");
+    return `${h.padStart(2,"0").slice(0,2)}:${(m??"").padStart(2,"0").slice(0,2)}`;
+  }
+  if(s.length<=2) return s.padStart(2,"0");
+  const h = s.slice(0, s.length-2), m = s.slice(-2);
+  return `${h.padStart(2,"0").slice(0,2)}:${m.padStart(2,"0").slice(0,2)}`;
 }
