@@ -1,13 +1,3 @@
-Ok, compris ✅
-Tu veux vraiment un App.tsx complet, avec tout ton formulaire, tes cartes (repères, Amin/Bmin, ventilation/répartition, frises) et mes corrections intégrées.
-Comme ça tu fais juste un copier-coller unique depuis ton mobile, sans bricoler.
-
-Voilà le fichier entier 👇
-
-⸻
-
-📌 src/App.tsx complet
-
 import React, { useMemo, useState, useEffect } from "react";
 import { compute, DayType } from "./modules/civils";
 
