@@ -160,15 +160,23 @@ export default function App() {
       (out.Amin_min % 60) < (out.Bmin_min % 60) ? "<" : "="
     : "=";
 
-  /* Styles */
+  /* ============ Styles compacts ============ */
   const box: React.CSSProperties  = { margin: "16px auto", maxWidth: 900, padding: 16, fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
   const card: React.CSSProperties = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 };
-  const row2: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignItems: "center" };
-  const row2tight: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, alignItems: "center" };
   const row3: React.CSSProperties = { display: "grid", gridTemplateColumns: "auto 1fr", gap: 6 };
   const btn: React.CSSProperties  = { padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" };
-  const inputStyle: React.CSSProperties = { width: "100%", minWidth: 0 };
-  const sep: React.CSSProperties   = { textAlign: "center", opacity: 0.6 };
+
+  // ligne flexible : [date][heure][(–)][heure][spacer]
+  const line: React.CSSProperties = { display: "flex", gap: 8, alignItems: "center", width: "100%" };
+
+  // tailles compactes
+  const dateNarrow: React.CSSProperties  = { flex: "0 0 9.5em", width: "9.5em", minWidth: 0 };
+  const timeNarrow: React.CSSProperties  = { flex: "0 0 6.2em", width: "6.2em", minWidth: 0 };
+  const grow: React.CSSProperties        = { flex: "1 1 auto", minWidth: 0 };
+  const sep: React.CSSProperties         = { textAlign: "center", opacity: 0.6 };
+
+  // inputs
+  const inputBase: React.CSSProperties   = { width: "100%", minWidth: 0, fontSize: 16, padding: "8px 10px" };
 
   /* Effacer tout */
   function clearAll() {
@@ -186,35 +194,37 @@ export default function App() {
         <button style={btn} onClick={clearAll}>Tout effacer</button>
       </div>
 
-      {/* --- Formulaire --- */}
+      {/* --- Formulaire (compact) --- */}
       <div style={{ ...card, display: "grid", gap: 12 }}>
         {/* Prise de service */}
         <div>
           <label>Prise de service</label>
-          <div style={row2}>
-            <input style={inputStyle} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+          <div style={line}>
+            <input style={{...inputBase, ...dateNarrow}} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
             <input
-              style={inputStyle}
+              style={{...inputBase, ...timeNarrow}}
               inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
               value={startTime}
               onChange={e=>setStartTime(formatTypingHHMM(e.target.value))}
               onBlur={e=>setStartTime(finalizeHHMM(e.target.value))}
             />
+            <div style={grow} />
           </div>
         </div>
 
         {/* Fin de service */}
         <div>
           <label>Fin de service</label>
-          <div style={row2}>
-            <input style={inputStyle} type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} />
+          <div style={line}>
+            <input style={{...inputBase, ...dateNarrow}} type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} />
             <input
-              style={inputStyle}
+              style={{...inputBase, ...timeNarrow}}
               inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
               value={endTime}
               onChange={e=>setEndTime(formatTypingHHMM(e.target.value))}
               onBlur={e=>setEndTime(finalizeHHMM(e.target.value))}
             />
+            <div style={grow} />
           </div>
         </div>
 
@@ -224,33 +234,32 @@ export default function App() {
             <span>Coupure</span>
             <button style={btn} onClick={()=>{ setBreakDate(""); setBreakStartTime(""); setBreakEndTime(""); }}>Effacer</button>
           </div>
-          <div style={row2}>
-            <input style={inputStyle} type="date" value={breakDate} onChange={e=>setBreakDate(e.target.value)} />
-            <div style={row2tight}>
-              <input
-                style={inputStyle}
-                inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-                value={breakStartTime}
-                onChange={e=>setBreakStartTime(formatTypingHHMM(e.target.value))}
-                onBlur={e=>{
-                  const v = finalizeHHMM(e.target.value);
-                  setBreakStartTime(v);
-                  if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
-                }}
-              />
-              <div style={sep}>–</div>
-              <input
-                style={inputStyle}
-                inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-                value={breakEndTime}
-                onChange={e=>setBreakEndTime(formatTypingHHMM(e.target.value))}
-                onBlur={e=>{
-                  const v = finalizeHHMM(e.target.value);
-                  setBreakEndTime(v);
-                  if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
-                }}
-              />
-            </div>
+          <div style={line}>
+            <input style={{...inputBase, ...dateNarrow}} type="date" value={breakDate} onChange={e=>setBreakDate(e.target.value)} />
+            <input
+              style={{...inputBase, ...timeNarrow}}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={breakStartTime}
+              onChange={e=>setBreakStartTime(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setBreakStartTime(v);
+                if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
+              }}
+            />
+            <div style={sep}>–</div>
+            <input
+              style={{...inputBase, ...timeNarrow}}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={breakEndTime}
+              onChange={e=>setBreakEndTime(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setBreakEndTime(v);
+                if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
+              }}
+            />
+            <div style={grow} />
           </div>
         </div>
 
@@ -260,22 +269,21 @@ export default function App() {
             <span>Repas méridien</span>
             <button style={btn} onClick={()=>{ setNoonDate(""); setNoonStart(""); }}>Effacer</button>
           </div>
-          <div style={row2}>
-            <input style={inputStyle} type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} />
-            <div style={row2}>
-              <input
-                style={inputStyle}
-                inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-                value={noonStart}
-                onChange={e=>setNoonStart(formatTypingHHMM(e.target.value))}
-                onBlur={e=>{
-                  const v = finalizeHHMM(e.target.value);
-                  setNoonStart(v);
-                  if (!noonDate && startDate && v) setNoonDate(startDate); // auto-date
-                }}
-              />
-              <input style={inputStyle} value={plus1hLabel(noonDate, noonStart, startDate)} readOnly />
-            </div>
+          <div style={line}>
+            <input style={{...inputBase, ...dateNarrow}} type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} />
+            <input
+              style={{...inputBase, ...timeNarrow}}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={noonStart}
+              onChange={e=>setNoonStart(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setNoonStart(v);
+                if (!noonDate && startDate && v) setNoonDate(startDate); // auto-date
+              }}
+            />
+            <input style={{...inputBase, ...timeNarrow}} value={plus1hLabel(noonDate, noonStart, startDate)} readOnly />
+            <div style={grow} />
           </div>
         </div>
 
@@ -285,22 +293,21 @@ export default function App() {
             <span>Repas vespéral</span>
             <button style={btn} onClick={()=>{ setEveDate(""); setEveStart(""); }}>Effacer</button>
           </div>
-          <div style={row2}>
-            <input style={inputStyle} type="date" value={eveDate} onChange={e=>setEveDate(e.target.value)} />
-            <div style={row2}>
-              <input
-                style={inputStyle}
-                inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-                value={eveStart}
-                onChange={e=>setEveStart(formatTypingHHMM(e.target.value))}
-                onBlur={e=>{
-                  const v = finalizeHHMM(e.target.value);
-                  setEveStart(v);
-                  if (!eveDate && startDate && v) setEveDate(startDate); // auto-date
-                }}
-              />
-              <input style={inputStyle} value={plus1hLabel(eveDate, eveStart, startDate)} readOnly />
-            </div>
+          <div style={line}>
+            <input style={{...inputBase, ...dateNarrow}} type="date" value={eveDate} onChange={e=>setEveDate(e.target.value)} />
+            <input
+              style={{...inputBase, ...timeNarrow}}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={eveStart}
+              onChange={e=>setEveStart(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setEveStart(v);
+                if (!eveDate && startDate && v) setEveDate(startDate); // auto-date
+              }}
+            />
+            <input style={{...inputBase, ...timeNarrow}} value={plus1hLabel(eveDate, eveStart, startDate)} readOnly />
+            <div style={grow} />
           </div>
         </div>
       </div>
@@ -315,13 +322,11 @@ export default function App() {
       {/* Repères */}
       {out && (
         <div style={{ ...card, marginTop: 12 }}>
-          <div style={row2}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div>DMJ atteinte à</div>
             <div>{fmtSmart(out.dmjEnd, startDT!, endDT!)}</div>
-
             <div>Amplitude atteinte à</div>
             <div>{fmtSmart(out.t13, startDT!, endDT!)}</div>
-
             <div>Dépassement total</div>
             <div>
               {asHM(out.Bmin_min)} → <strong style={{color:"#b91c1c"}}>{asHMstrict(out.B_total_h*60)}</strong>
@@ -333,7 +338,7 @@ export default function App() {
       {/* Amin / Bmin */}
       {out && (
         <div style={{ ...card, marginTop: 12 }}>
-          <div style={row2}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div>Amin</div>
             <div>{Math.floor(out.Amin_min/60)} h <strong>{pad(out.Amin_min%60)}</strong></div>
             <div>Bmin</div>
