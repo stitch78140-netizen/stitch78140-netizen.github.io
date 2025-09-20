@@ -390,6 +390,20 @@ export default function App() {
           </div>
         </div>
       )}
+      
+      {/* --- Frise explicative --- */}
+{out && (
+  <div style={{ ...card, marginTop: 12 }}>
+    <Frise
+      start={startDT!}
+      dmj={out.dmjEnd}
+      t13={out.t13}
+      end={endDT!}
+      nonMajHours={nonMaj}
+      majHours={maj}
+    />
+  </div>
+)}
 
       {/* footer */}
       <div style={{opacity:0.6, fontSize:12, textAlign:"center", marginTop:16}}>
@@ -397,4 +411,53 @@ export default function App() {
       </div>
     </div>
   );
+  /* ============ Frise simple ============ */
+function Frise(props: { start: Date; dmj: Date; t13: Date; end: Date; nonMajHours: number; majHours: number; }) {
+  const cellW = 40; // largeur d’une heure
+  const cellH = 24;
+
+  function hourLabel(d: Date) {
+    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  }
+
+  function isNight(d: Date) {
+    const h = d.getHours();
+    return (h >= 21 || h < 6);
+  }
+
+  // ligne 1 : heures sup de base depuis DMJ
+  const hsRects = Array.from({length: props.nonMajHours}).map((_,i)=>{
+    const h = new Date(props.dmj.getTime() + i*3600000);
+    return (
+      <g key={`hs-${i}`}>
+        <rect x={i*cellW} y={0} width={cellW-2} height={cellH} rx={4} ry={4}
+              fill={isNight(h) ? "#fca5a5" : "#e5e7eb"} stroke="#9ca3af"/>
+        <text x={i*cellW+cellW/2} y={cellH/2+4} textAnchor="middle" fontSize="12">{hourLabel(h)}</text>
+      </g>
+    );
+  });
+
+  // ligne 2 : heures maj depuis amplitude
+  const majRects = Array.from({length: props.majHours}).map((_,i)=>{
+    const h = new Date(props.t13.getTime() + i*3600000);
+    return (
+      <g key={`maj-${i}`}>
+        <rect x={i*cellW} y={cellH+10} width={cellW-2} height={cellH} rx={4} ry={4}
+              fill={isNight(h) ? "#fca5a5" : "#fde68a"} stroke="#9ca3af"/>
+        <text x={i*cellW+cellW/2} y={cellH+10+cellH/2+4} textAnchor="middle" fontSize="12">{hourLabel(h)}</text>
+      </g>
+    );
+  });
+
+  const totalW = Math.max(props.nonMajHours, props.majHours) * cellW;
+
+  return (
+    <svg width="100%" height={cellH*2+20} viewBox={`0 0 ${Math.max(totalW, cellW*6)} ${cellH*2+20}`}>
+      <text x="0" y={cellH/2} fontSize="12" fill="#374151">HS (DMJ→)</text>
+      <g transform="translate(80,0)">{hsRects}</g>
+      <text x="0" y={cellH+cellH/2+10} fontSize="12" fill="#374151">Maj (Amplitude→)</text>
+      <g transform="translate(80,0)">{majRects}</g>
+    </svg>
+  );
+}
 }
