@@ -10,17 +10,16 @@ import {
 const pad = (n: number) => String(n).padStart(2, "0");
 
 function addMinutes(d: Date, m: number) { return new Date(d.getTime() + m * 60000); }
-function toISODate(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 function asHM(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
 function asHMstrict(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
 
-/** Pendant la frappe : garde 0-4 chiffres, insère ":" seulement à partir de 3 chiffres. */
+/** Pendant la frappe : 0–4 chiffres ; ajoute ":" seulement à partir de 3 chiffres. */
 function formatTypingHHMM(raw: string): string {
   const d = raw.replace(/[^\d]/g, "").slice(0, 4);
   if (d.length <= 2) return d;
   return d.slice(0, 2) + ":" + d.slice(2);
 }
-/** Au blur : finalise en HH:MM avec padding + bornage (0–23, 0–59). */
+/** Au blur : finalise en HH:MM (padding) + bornage (0–23, 0–59). */
 function finalizeHHMM(raw: string): string {
   const d = raw.replace(/[^\d]/g, "");
   if (d.length === 0) return "";
@@ -39,16 +38,18 @@ function isValidHHMM(v: string) {
   const h = +m[1], mm = +m[2];
   return h >= 0 && h <= 23 && mm >= 0 && mm <= 59;
 }
-/** HH:MM -> Date ISO (+1h) puis renvoie "HH:MM" lisible (pas un datetime-local) */
-function plus1hLabel(dateISO: string, hhmm: string) {
-  if (!dateISO || !isValidHHMM(hhmm)) return "";
+
+/** Affiche +1h sous forme HH:MM ; si date vide, fallback sur la PDS. */
+function plus1hLabel(dateISO: string, hhmm: string, fallbackDateISO?: string) {
+  const useDate = dateISO || fallbackDateISO || "";
+  if (!useDate || !isValidHHMM(hhmm)) return "";
   const [h, m] = hhmm.split(":").map(Number);
-  const d = new Date(`${dateISO}T${pad(h)}:${pad(m)}`);
+  const d = new Date(`${useDate}T${pad(h)}:${pad(m)}`);
   const e = addMinutes(d, 60);
   return `${pad(e.getHours())}:${pad(e.getMinutes())}`;
 }
 
-/** DMJ/Amplitude : HH:MM en gras si même jour que PDS/FDS, sinon JJ/MM/AAAA HH:MM (heure en gras) */
+/** DMJ/Amplitude : HH:MM en gras si même jour que PDS/FDS ; sinon JJ/MM/AAAA HH:MM (heure en gras). */
 function fmtSmart(d: Date, refStart?: Date, refEnd?: Date) {
   const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const sd = refStart ? refStart.toDateString() : "";
@@ -80,7 +81,7 @@ export default function App() {
   /* Type de jour (TSr) */
   const [dayType, setDayType] = useState<DayType>("SO");
 
-  /* Constructions Date */
+  /* Constructions Date (fallback sur startDate si date locale absente) */
   const startDT = useMemo(() => {
     if (!startDate || !isValidHHMM(startTime)) return null;
     const [h,m] = startTime.split(":").map(Number);
@@ -94,28 +95,32 @@ export default function App() {
   }, [endDate, endTime]);
 
   const breakStartDT = useMemo(() => {
-    if (!breakDate || !isValidHHMM(breakStartTime)) return null;
+    const dISO = breakDate || startDate;
+    if (!dISO || !isValidHHMM(breakStartTime)) return null;
     const [h,m] = breakStartTime.split(":").map(Number);
-    return new Date(`${breakDate}T${pad(h)}:${pad(m)}`);
-  }, [breakDate, breakStartTime]);
+    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+  }, [breakDate, breakStartTime, startDate]);
 
   const breakEndDT = useMemo(() => {
-    if (!breakDate || !isValidHHMM(breakEndTime)) return null;
+    const dISO = breakDate || startDate;
+    if (!dISO || !isValidHHMM(breakEndTime)) return null;
     const [h,m] = breakEndTime.split(":").map(Number);
-    return new Date(`${breakDate}T${pad(h)}:${pad(m)}`);
-  }, [breakDate, breakEndTime]);
+    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+  }, [breakDate, breakEndTime, startDate]);
 
   const noonStartDT = useMemo(() => {
-    if (!noonDate || !isValidHHMM(noonStart)) return null;
+    const dISO = noonDate || startDate;
+    if (!dISO || !isValidHHMM(noonStart)) return null;
     const [h,m] = noonStart.split(":").map(Number);
-    return new Date(`${noonDate}T${pad(h)}:${pad(m)}`);
-  }, [noonDate, noonStart]);
+    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+  }, [noonDate, noonStart, startDate]);
 
   const eveStartDT = useMemo(() => {
-    if (!eveDate || !isValidHHMM(eveStart)) return null;
+    const dISO = eveDate || startDate;
+    if (!dISO || !isValidHHMM(eveStart)) return null;
     const [h,m] = eveStart.split(":").map(Number);
-    return new Date(`${eveDate}T${pad(h)}:${pad(m)}`);
-  }, [eveDate, eveStart]);
+    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+  }, [eveDate, eveStart, startDate]);
 
   /* TSr (journée comptable) */
   useEffect(() => {
@@ -155,13 +160,15 @@ export default function App() {
       (out.Amin_min % 60) < (out.Bmin_min % 60) ? "<" : "="
     : "=";
 
-  /* Styles (anti débordement) */
+  /* Styles */
   const box: React.CSSProperties  = { margin: "16px auto", maxWidth: 900, padding: 16, fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
   const card: React.CSSProperties = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 };
-  const row2: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, alignItems: "center" };
+  const row2: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, alignItems: "center" };
+  const row2tight: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, alignItems: "center" };
   const row3: React.CSSProperties = { display: "grid", gridTemplateColumns: "auto 1fr", gap: 6 };
   const btn: React.CSSProperties  = { padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" };
   const inputStyle: React.CSSProperties = { width: "100%", minWidth: 0 };
+  const sep: React.CSSProperties   = { textAlign: "center", opacity: 0.6 };
 
   /* Effacer tout */
   function clearAll() {
@@ -173,7 +180,6 @@ export default function App() {
     setDayType("SO");
   }
 
-  /* Rendus */
   return (
     <div style={box}>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
@@ -220,20 +226,29 @@ export default function App() {
           </div>
           <div style={row2}>
             <input style={inputStyle} type="date" value={breakDate} onChange={e=>setBreakDate(e.target.value)} />
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+            <div style={row2tight}>
               <input
                 style={inputStyle}
                 inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
                 value={breakStartTime}
                 onChange={e=>setBreakStartTime(formatTypingHHMM(e.target.value))}
-                onBlur={e=>setBreakStartTime(finalizeHHMM(e.target.value))}
+                onBlur={e=>{
+                  const v = finalizeHHMM(e.target.value);
+                  setBreakStartTime(v);
+                  if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
+                }}
               />
+              <div style={sep}>–</div>
               <input
                 style={inputStyle}
                 inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
                 value={breakEndTime}
                 onChange={e=>setBreakEndTime(formatTypingHHMM(e.target.value))}
-                onBlur={e=>setBreakEndTime(finalizeHHMM(e.target.value))}
+                onBlur={e=>{
+                  const v = finalizeHHMM(e.target.value);
+                  setBreakEndTime(v);
+                  if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
+                }}
               />
             </div>
           </div>
@@ -247,15 +262,19 @@ export default function App() {
           </div>
           <div style={row2}>
             <input style={inputStyle} type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} />
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+            <div style={row2}>
               <input
                 style={inputStyle}
                 inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
                 value={noonStart}
                 onChange={e=>setNoonStart(formatTypingHHMM(e.target.value))}
-                onBlur={e=>setNoonStart(finalizeHHMM(e.target.value))}
+                onBlur={e=>{
+                  const v = finalizeHHMM(e.target.value);
+                  setNoonStart(v);
+                  if (!noonDate && startDate && v) setNoonDate(startDate); // auto-date
+                }}
               />
-              <input style={inputStyle} value={plus1hLabel(noonDate, noonStart)} readOnly />
+              <input style={inputStyle} value={plus1hLabel(noonDate, noonStart, startDate)} readOnly />
             </div>
           </div>
         </div>
@@ -268,15 +287,19 @@ export default function App() {
           </div>
           <div style={row2}>
             <input style={inputStyle} type="date" value={eveDate} onChange={e=>setEveDate(e.target.value)} />
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+            <div style={row2}>
               <input
                 style={inputStyle}
                 inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
                 value={eveStart}
                 onChange={e=>setEveStart(formatTypingHHMM(e.target.value))}
-                onBlur={e=>setEveStart(finalizeHHMM(e.target.value))}
+                onBlur={e=>{
+                  const v = finalizeHHMM(e.target.value);
+                  setEveStart(v);
+                  if (!eveDate && startDate && v) setEveDate(startDate); // auto-date
+                }}
               />
-              <input style={inputStyle} value={plus1hLabel(eveDate, eveStart)} readOnly />
+              <input style={inputStyle} value={plus1hLabel(eveDate, eveStart, startDate)} readOnly />
             </div>
           </div>
         </div>
