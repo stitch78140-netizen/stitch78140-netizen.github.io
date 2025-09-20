@@ -6,20 +6,18 @@ import {
   dayTypeFromAccountingDate,
 } from "./modules/civils";
 
-// helpers
+// --- helpers ---
 function toLocal(d: Date) {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(
     d.getHours()
   )}:${p(d.getMinutes())}`;
 }
-function fmtDateTime(d: Date) {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(
-    d.getHours()
-  )}:${p(d.getMinutes())}`;
-}
 function asHM(min: number) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+function asHMstrict(min: number) {  // force HH:MM (utile pour l'arrondi)
   const h = Math.floor(min / 60), m = min % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
@@ -29,9 +27,26 @@ function plus1hISO(dt?: string) {
   d.setHours(d.getHours() + 1);
   return toLocal(d);
 }
+// DMJ/Amplitude : n'affiche que HH:MM si même jour que PDS/FDS, sinon JJ/MM/AAAA HH:MM (HH:MM en gras)
+function fmtSmart(d: Date, refStart?: string, refEnd?: string) {
+  const p = (n: number) => String(n).padStart(2, "0");
+  const hm = `${p(d.getHours())}:${p(d.getMinutes())}`;
+  let sameDay = false;
+  if (refStart) sameDay ||= d.toDateString() === new Date(refStart).toDateString();
+  if (refEnd) sameDay ||= d.toDateString() === new Date(refEnd).toDateString();
+  if (sameDay) {
+    return <strong>{hm}</strong>;
+  } else {
+    return (
+      <>
+        {p(d.getDate())}/{p(d.getMonth() + 1)}/{d.getFullYear()} <strong>{hm}</strong>
+      </>
+    );
+  }
+}
 
 export default function App() {
-  // valeurs par défaut (vides au départ)
+  // valeurs par défaut (vides)
   const [start, setStart] = useState<string>("");
   const [end, setEnd] = useState<string>("");
 
@@ -39,15 +54,16 @@ export default function App() {
   const [breakStart, setBreakStart] = useState<string>("");
   const [breakEnd, setBreakEnd] = useState<string>("");
 
-  // Repas
+  // Repas (début saisi, fin = +1h, non cliquable)
   const [noonS, setNoonS] = useState<string>("");
   const noonE = plus1hISO(noonS);
   const [eveS, setEveS] = useState<string>("");
   const eveE = plus1hISO(eveS);
 
+  // Type de jour (TSr)
   const [dayType, setDayType] = useState<DayType>("SO");
 
-  // recalcul type de jour
+  // Recalcule TSr à chaque changement
   useEffect(() => {
     if (!start || !end) return;
     const meals: Array<{ start: Date; end: Date }> = [];
@@ -59,7 +75,7 @@ export default function App() {
     setDayType(dayTypeFromAccountingDate(acc));
   }, [start, end, noonS, noonE, eveS, eveE, breakStart, breakEnd]);
 
-  // calcul principal
+  // Calcul principal
   const out = useMemo(() => {
     if (!start || !end) return null;
     return compute({
@@ -76,15 +92,16 @@ export default function App() {
     });
   }, [start, end, breakStart, breakEnd, noonS, noonE, eveS, eveE, dayType]);
 
-  // libellés & facteur
+  // Libellés & facteur (pour majorées)
   const HS_label = dayType === "RH" ? "HSD" : "HS";
   const HSM_label = dayType === "RH" ? "HDM" : "HSM";
   const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
 
+  // Répartition
   const nonMaj = out ? Math.min(out.A_hours, out.B_total_h) : 0;
   const maj = out ? Math.max(0, out.B_total_h - nonMaj) : 0;
 
-  // comparateur
+  // Comparateur minutes-only
   const cmp =
     out && (out.Amin_min % 60) > (out.Bmin_min % 60)
       ? ">"
@@ -99,6 +116,7 @@ export default function App() {
   const row3: React.CSSProperties = { display: "grid", gridTemplateColumns: "auto 1fr", gap: 6 };
   const btn: React.CSSProperties = { padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" };
 
+  // Tout effacer
   function clearAll() {
     setStart(""); setEnd("");
     setBreakStart(""); setBreakEnd("");
@@ -108,7 +126,7 @@ export default function App() {
 
   return (
     <div style={box}>
-      {/* Barre supérieure : bouton effacer */}
+      {/* barre supérieure */}
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
         <button style={btn} onClick={clearAll}>Tout effacer</button>
       </div>
@@ -180,11 +198,15 @@ export default function App() {
         <div style={{ ...card, marginTop: 12 }}>
           <div style={row2}>
             <div>DMJ atteinte à</div>
-            <div><strong>{fmtDateTime(out.dmjEnd)}</strong></div>
+            <div>{fmtSmart(out.dmjEnd, start, end)}</div>
+
             <div>Amplitude atteinte à</div>
-            <div><strong>{fmtDateTime(out.t13)}</strong></div>
+            <div>{fmtSmart(out.t13, start, end)}</div>
+
             <div>Dépassement total</div>
-            <div>{asHM(out.Bmin_min)} → <strong style={{color:"#b91c1c"}}>{out.B_total_h}:00</strong></div>
+            <div>
+              {asHM(out.Bmin_min)} → <strong style={{color:"#b91c1c"}}>{asHMstrict(out.B_total_h * 60)}</strong>
+            </div>
           </div>
         </div>
       )}
@@ -229,7 +251,7 @@ export default function App() {
         </div>
       )}
 
-      {/* footer discret */}
+      {/* footer */}
       <div style={{opacity:0.6, fontSize:12, textAlign:"center", marginTop:16}}>
         © Stitch08
       </div>
