@@ -1,0 +1,21 @@
+{
+  "name": "Civils D\u00e9plac\u00e9s v6",
+  "short_name": "Civils v6",
+  "description": "DMJ accumulation, Amin break-only, mapping HSD/HDM, cr\u00e9dit RCJ/RL",
+  "theme_color": "#0ea5e9",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
