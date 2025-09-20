@@ -23,13 +23,11 @@ export interface Output {
   HS: number; HSN: number; HSM: number; HNM: number;
 }
 
-// -------------------- Utils de temps --------------------
+// ---- Utils temps
 function minutesBetween(a: Date, b: Date){ return Math.max(0, Math.round((b.getTime()-a.getTime())/60000)); }
 function addMin(d: Date, m: number){ return new Date(d.getTime()+m*60000); }
-function ceilH(m: number){ if(m<=0) return 0; const h=Math.floor(m/60), r=m%60; return r? h+1 : h; }
-function floorH(m: number){ if(m<=0) return 0; return Math.floor(m/60); }
 
-// Fusion/normalisation d'intervalles
+// Fusion d'intervalles triés et normalisés
 function normalize(ints: Array<{start:Date; end:Date}>){
   if(!ints.length) return [] as Array<{start:Date; end:Date}>;
   ints.sort((a,b)=> a.start.getTime()-b.start.getTime());
@@ -42,7 +40,7 @@ function normalize(ints: Array<{start:Date; end:Date}>){
   return out;
 }
 
-// Retirer des pauses d'un segment [baseStart,baseEnd[
+// Soustrait remove[] du segment [baseStart, baseEnd[
 function subtract(baseStart: Date, baseEnd: Date, remove: Array<{start:Date; end:Date}>){
   const clipped = remove
     .map(r=>({start:new Date(Math.max(r.start.getTime(), baseStart.getTime())),
@@ -55,7 +53,7 @@ function subtract(baseStart: Date, baseEnd: Date, remove: Array<{start:Date; end
   return segs;
 }
 
-// -------------------- DMJ (7h48 effectives) --------------------
+// ---- DMJ = 7h48 effectives (repas + coupure repoussent si elles la chevauchent)
 function computeDMJ(start: Date, pauses: Array<{start:Date; end:Date}>, targetMin=468){
   const merged = normalize(pauses);
   const endWindow = addMin(start, 2*24*60);
@@ -70,7 +68,7 @@ function computeDMJ(start: Date, pauses: Array<{start:Date; end:Date}>, targetMi
   return endWindow;
 }
 
-// -------------------- Heures de nuit (heure ENTIEREMENT dans 21:00–06:00) --------------------
+// ---- Heure de nuit : heure complète ENTIEREMENT dans [21:00,06:00)
 function isFullNightHour(s: Date, e: Date){
   const spans: Array<{sd:Date; ed:Date}>=[]; const midnight = new Date(s); midnight.setHours(24,0,0,0);
   if(e<=midnight) spans.push({sd:s,ed:e}); else { spans.push({sd:s,ed:midnight}); spans.push({sd:midnight,ed:e}); }
@@ -80,12 +78,12 @@ function isFullNightHour(s: Date, e: Date){
     const h21=new Date(d0); h21.setHours(21,0,0,0);
     const interStart = new Date(Math.max(sp.sd.getTime(), h06.getTime()));
     const interEnd   = new Date(Math.min(sp.ed.getTime(), h21.getTime()));
-    if(interEnd>interStart) return false; // chevauche jour → pas de nuit pleine
+    if(interEnd>interStart) return false;
   }
   return true;
 }
 
-// -------------------- Calcul principal --------------------
+// ---- Calcul principal
 export function compute(input: Input): Output {
   const start=input.start, end=input.end;
   const t13 = addMin(start, 13*60);
@@ -104,11 +102,11 @@ export function compute(input: Input): Output {
   // Amin = travail effectif entre DMJ et 13h (on déduit UNIQUEMENT la coupure)
   const Amin_min = subtract(dmjEnd, t13, breaks).reduce((a,s)=> a+minutesBetween(s.start,s.end), 0);
 
-  // Arbitrage minutes-only (règle que tu m'as donnée)
+  // Arbitrage minutes-only
   const A_hours = (Amin_min%60) > (Bmin_min%60) ? Math.ceil(Amin_min/60) : Math.floor(Amin_min/60);
   const B_total_h = Math.ceil(Bmin_min/60);
 
-  // Frises virtuelles (non maj depuis DMJ, maj depuis 13h si amplitude atteinte)
+  // Répartition
   const nonMaj = Math.min(A_hours, B_total_h);
   const maj    = Math.max(0, B_total_h - nonMaj);
 
@@ -133,49 +131,38 @@ export function compute(input: Input): Output {
   return { dmjEnd, t13, Bmin_min, Amin_min, A_hours, B_total_h, HS, HSN, HSM, HNM };
 }
 
-// -------------------- Journée comptable --------------------
+// ---- Journée comptable (jour avec le plus de travail effectif)
 function ymd(d: Date){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-
 function splitByMidnight(seg: {start: Date; end: Date}) {
   const parts: Array<{start:Date; end:Date}> = [];
   let s = new Date(seg.start), e = new Date(seg.end);
   while (true) {
-    const cut = new Date(s); cut.setHours(24,0,0,0); // minuit suivant
+    const cut = new Date(s); cut.setHours(24,0,0,0);
     if (e <= cut) { parts.push({ start:s, end:e }); break; }
-    parts.push({ start:s, end:cut });
-    s = cut;
+    parts.push({ start:s, end:cut }); s = cut;
   }
   return parts;
 }
-
-/** Retourne la date (00:00) correspondant à la journée comptable : jour avec le plus de travail effectif */
 export function computeAccountingDate(
-  start: Date,
-  end: Date,
+  start: Date, end: Date,
   meals: Array<{start:Date; end:Date}> = [],
   breaks: Array<{start:Date; end:Date}> = []
 ): Date {
   const pauses = normalize(meals.concat(breaks));
-  const eff = subtract(start, end, pauses); // segments de travail effectif
+  const eff = subtract(start, end, pauses);
   const perDay = new Map<string, number>();
-  for (const seg of eff) {
-    for (const part of splitByMidnight(seg)) {
-      const key = ymd(part.start);
-      const mins = minutesBetween(part.start, part.end);
-      perDay.set(key, (perDay.get(key) ?? 0) + mins);
-    }
+  for (const seg of eff) for (const part of splitByMidnight(seg)) {
+    const key = ymd(part.start);
+    const mins = minutesBetween(part.start, part.end);
+    perDay.set(key, (perDay.get(key) ?? 0) + mins);
   }
   let bestKey = ymd(start), bestVal = -1;
-  for (const [k, v] of perDay.entries()) {
-    if (v > bestVal) { bestVal = v; bestKey = k; }
-  }
+  for (const [k,v] of perDay.entries()) if (v > bestVal) { bestVal=v; bestKey=k; }
   const [Y,M,D] = bestKey.split('-').map(Number);
-  return new Date(Y, (M-1), D, 0, 0, 0, 0);
+  return new Date(Y,(M-1),D,0,0,0,0);
 }
-
-/** Déduction SO/R/RH à partir de la journée comptable */
 export function dayTypeFromAccountingDate(d: Date): DayType {
-  const dow = d.getDay(); // 0=Dimanche, 6=Samedi
+  const dow = d.getDay(); // 0=Dim, 6=Sam
   if (dow === 0) return 'RH';
   if (dow === 6) return 'R';
   return 'SO';
