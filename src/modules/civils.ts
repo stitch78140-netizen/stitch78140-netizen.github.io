@@ -125,4 +125,55 @@ export function compute(input: Input): Output {
 
   // Dimanche : renommage HS→HSD et HSM→HDM sera géré dans l’UI (affichage)
   return { dmjEnd, t13, Bmin_min, Amin_min, A_hours, B_total_h, HS, HSN, HSM, HNM };
+
+// --- Journée comptable (jour avec le plus de travail effectif) ---
+function ymd(d: Date){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+function splitByMidnight(seg: {start: Date; end: Date}) {
+  const parts: Array<{start:Date; end:Date}> = [];
+  let s = new Date(seg.start), e = new Date(seg.end);
+  while (true) {
+    const cut = new Date(s); cut.setHours(24,0,0,0); // minuit suivant
+    if (e <= cut) { parts.push({ start:s, end:e }); break; }
+    parts.push({ start:s, end:cut });
+    s = cut;
+  }
+  return parts;
+}
+
+/** Retourne la DATE (00:00) correspondant à la journée comptable */
+export function computeAccountingDate(
+  start: Date,
+  end: Date,
+  meals: Array<{start:Date; end:Date}> = [],
+  breaks: Array<{start:Date; end:Date}> = []
+): Date {
+  const pauses = normalize(meals.concat(breaks));
+  // Segments de travail effectif (pauses déduites) entre start et end
+  const eff = subtract(start, end, pauses);
+  // Minutes par jour (YYYY-MM-DD)
+  const perDay = new Map<string, number>();
+  for (const seg of eff) {
+    for (const part of splitByMidnight(seg)) {
+      const key = ymd(part.start);
+      const mins = minutesBetween(part.start, part.end);
+      perDay.set(key, (perDay.get(key) ?? 0) + mins);
+    }
+  }
+  // Jour avec max de minutes
+  let bestKey = ymd(start), bestVal = -1;
+  for (const [k, v] of perDay.entries()) {
+    if (v > bestVal) { bestVal = v; bestKey = k; }
+  }
+  const [Y,M,D] = bestKey.split('-').map(Number);
+  return new Date(Y, (M-1), D, 0, 0, 0, 0);
+}
+
+/** SO/R/RH déterminé à partir de la journée comptable */
+export function dayTypeFromAccountingDate(d: Date): DayType {
+  const dow = d.getDay(); // 0=Dimanche, 6=Samedi
+  if (dow === 0) return 'RH';
+  if (dow === 6) return 'R';
+  return 'SO';
+}
 }
