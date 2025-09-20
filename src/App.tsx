@@ -1,16 +1,16 @@
 import React, { useMemo, useState } from "react";
 import { compute, DayType } from "./modules/civils";
 
-// mini helpers pour inputs
+// helpers
 function toLocal(d: Date){ const p=(n:number)=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
 function asHM(min: number){ const h=Math.floor(min/60), m=min%60; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}` }
 
 export default function App(){
-  // valeurs par défaut simples
-  const today = new Date(); today.setHours(7,0,0,0);
+  // valeurs par défaut
+  const base = new Date(); base.setHours(7,0,0,0);
   const [dayType, setDayType] = useState<DayType>('SO');
-  const [start, setStart] = useState<Date>(new Date(today));
-  const [end, setEnd] = useState<Date>(new Date(today.getTime()+13.5*3600*1000));
+  const [start, setStart] = useState<Date>(new Date(base));
+  const [end, setEnd] = useState<Date>(new Date(base.getTime()+13.5*3600*1000));
   const [breakStart, setBreakStart] = useState<string>('');
   const [breakEnd, setBreakEnd] = useState<string>('');
   const [noonS, setNoonS] = useState<string>('');
@@ -27,11 +27,14 @@ export default function App(){
     dayType
   }), [start,end,breakStart,breakEnd,noonS,noonE,eveS,eveE,dayType]);
 
-  const factor = dayType==='SO'?1.5: dayType==='R'?2: 3;
-  const HS_label  = dayType==='RH' ? 'HSD' : 'HS';
-  const HSM_label = dayType==='RH' ? 'HDM' : 'HSM';
-  const nonMaj = Math.min(out.A_hours, out.B_total_h);
-  const maj    = Math.max(0, out.B_total_h - nonMaj);
+  // ⬇️ Libellés & facteurs EXACTS selon tes règles
+  const HS_label  = dayType === 'RH' ? 'HSD' : 'HS';   // dimanche on renomme seulement
+  const HSM_label = dayType === 'RH' ? 'HDM' : 'HSM';  // dimanche on renomme seulement
+  const factor = dayType === 'SO' ? 1.5 : dayType === 'R' ? 2 : 3; // 150/200/300% s’applique UNIQUEMENT aux MAJORÉES
+
+  // Répartition arrondie : non majorées (HS/HSD) puis majorées (HSM/HDM)
+  const nonMaj = Math.min(out.A_hours, out.B_total_h);     // HS/HSD
+  const maj    = Math.max(0, out.B_total_h - nonMaj);      // HSM/HDM uniquement
 
   const box: React.CSSProperties = { margin:'16px auto', maxWidth:900, padding:16, fontFamily:'system-ui,-apple-system,Segoe UI,Roboto,sans-serif' };
   const card: React.CSSProperties = { background:'#fff', border:'1px solid #e5e7eb', borderRadius:12, padding:12 };
@@ -100,7 +103,12 @@ export default function App(){
           <div style={{fontWeight:600, marginBottom:8}}>Ventilation des heures</div>
           <div style={{display:'grid', gridTemplateColumns:'auto 1fr', gap:6}}>
             <div>{nonMaj} {HS_label}</div><div/>
-            {maj>0 && (<><div>1 HS × {factor*100}% soit</div><div>{maj} {HSM_label} ({dayType})</div></>)}
+            {maj>0 && (
+              <>
+                <div>1 HS × {factor*100}% soit</div>
+                <div>{maj} {HSM_label} ({dayType})</div>
+              </>
+            )}
           </div>
           <div style={{marginTop:8, color:'#b91c1c', fontWeight:600}}>
             {dayType==='R' && 'Crédit de 1 RCJ au titre du DP sur le R'}
@@ -116,13 +124,13 @@ export default function App(){
         </div>
       </div>
 
-      {/* Totaux par acronymes (HS/HSN/HSM/HNM) */}
+      {/* Totaux par acronymes */}
       <div style={{...card, marginTop:12}}>
         <div style={{fontWeight:600, marginBottom:8}}>Totaux</div>
         <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6}}>
-          <div>{dayType==='RH'?'HSD':'HS'}: {out.HS}</div>
+          <div>{HS_label}: {out.HS}</div>
           <div>HSN: {out.HSN}</div>
-          <div>{dayType==='RH'?'HDM':'HSM'}: {out.HSM}</div>
+          <div>{HSM_label}: {out.HSM}</div>
           <div>HNM: {out.HNM}</div>
         </div>
       </div>
