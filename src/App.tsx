@@ -6,146 +6,191 @@ import {
   dayTypeFromAccountingDate,
 } from "./modules/civils";
 
-// --- helpers ---
-function toLocal(d: Date) {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(
-    d.getHours()
-  )}:${p(d.getMinutes())}`;
+/* ============ Helpers ============ */
+const pad = (n: number) => String(n).padStart(2, "0");
+
+// auto-format "1725" -> "17:25", "9" -> "09:", "093" -> "09:3"
+function normalizeHHMM(raw: string): string {
+  let v = raw.replace(/[^\d]/g, "").slice(0, 4);
+  if (v.length >= 3) v = v.slice(0, 2) + ":" + v.slice(2);
+  if (v.length === 1) v = "0" + v + ":";
+  if (v.length === 2) v = v + ":";
+  return v;
 }
-function asHM(min: number) {
-  const h = Math.floor(min / 60), m = min % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+function isValidHHMM(v: string) {
+  const m = /^(\d{2}):(\d{2})$/.exec(v);
+  if (!m) return false;
+  const h = +m[1], mm = +m[2];
+  return h >= 0 && h <= 23 && mm >= 0 && mm <= 59;
 }
-function asHMstrict(min: number) {  // force HH:MM (utile pour l'arrondi)
-  const h = Math.floor(min / 60), m = min % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+function addMinutes(d: Date, m: number) { return new Date(d.getTime() + m * 60000); }
+function plus1hFrom(dateISO: string, hhmm: string) {
+  if (!dateISO || !isValidHHMM(hhmm)) return "";
+  const [h, m] = hhmm.split(":").map(Number);
+  const d = new Date(dateISO + "T" + pad(h) + ":" + pad(m));
+  const e = addMinutes(d, 60);
+  return `${e.getFullYear()}-${pad(e.getMonth()+1)}-${pad(e.getDate())}T${pad(e.getHours())}:${pad(e.getMinutes())}`;
 }
-function plus1hISO(dt?: string) {
-  if (!dt) return "";
-  const d = new Date(dt);
-  d.setHours(d.getHours() + 1);
-  return toLocal(d);
-}
-// DMJ/Amplitude : n'affiche que HH:MM si même jour que PDS/FDS, sinon JJ/MM/AAAA HH:MM (HH:MM en gras)
-function fmtSmart(d: Date, refStart?: string, refEnd?: string) {
-  const p = (n: number) => String(n).padStart(2, "0");
-  const hm = `${p(d.getHours())}:${p(d.getMinutes())}`;
-  let sameDay = false;
-  if (refStart) sameDay ||= d.toDateString() === new Date(refStart).toDateString();
-  if (refEnd) sameDay ||= d.toDateString() === new Date(refEnd).toDateString();
-  if (sameDay) {
-    return <strong>{hm}</strong>;
-  } else {
-    return (
-      <>
-        {p(d.getDate())}/{p(d.getMonth() + 1)}/{d.getFullYear()} <strong>{hm}</strong>
-      </>
-    );
-  }
+function toISODate(d: Date) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+
+function asHM(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`;}
+function asHMstrict(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
+
+function fmtSmart(d: Date, refStart?: Date, refEnd?: Date) {
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const sd = refStart ? refStart.toDateString() : "";
+  const ed = refEnd ? refEnd.toDateString() : "";
+  const same = d.toDateString() === sd || d.toDateString() === ed;
+  if (same) return <strong>{hm}</strong>;
+  return <>{pad(d.getDate())}/{pad(d.getMonth()+1)}/{d.getFullYear()} <strong>{hm}</strong></>;
 }
 
+/* ============ App ============ */
 export default function App() {
-  // valeurs par défaut (vides)
-  const [start, setStart] = useState<string>("");
-  const [end, setEnd] = useState<string>("");
+  /* Prise / Fin : date + heure séparées */
+  const [startDate, setStartDate] = useState<string>(""); // YYYY-MM-DD
+  const [startTime, setStartTime] = useState<string>(""); // HH:MM
+  const [endDate, setEndDate] = useState<string>("");
+  const [endTime, setEndTime] = useState<string>("");
 
-  // Coupure
-  const [breakStart, setBreakStart] = useState<string>("");
-  const [breakEnd, setBreakEnd] = useState<string>("");
+  /* Coupure */
+  const [breakDate, setBreakDate] = useState<string>("");
+  const [breakStartTime, setBreakStartTime] = useState<string>("");
+  const [breakEndTime, setBreakEndTime] = useState<string>("");
 
-  // Repas (début saisi, fin = +1h, non cliquable)
-  const [noonS, setNoonS] = useState<string>("");
-  const noonE = plus1hISO(noonS);
-  const [eveS, setEveS] = useState<string>("");
-  const eveE = plus1hISO(eveS);
+  /* Repas (début seulement, fin = +1h) */
+  const [noonDate, setNoonDate] = useState<string>("");
+  const [noonStart, setNoonStart] = useState<string>("");
+  const [eveDate, setEveDate] = useState<string>("");
+  const [eveStart, setEveStart] = useState<string>("");
 
-  // Type de jour (TSr)
+  /* Type de jour (TSr) */
   const [dayType, setDayType] = useState<DayType>("SO");
 
-  // Recalcule TSr à chaque changement
-  useEffect(() => {
-    if (!start || !end) return;
-    const meals: Array<{ start: Date; end: Date }> = [];
-    if (noonS) meals.push({ start: new Date(noonS), end: new Date(noonE) });
-    if (eveS) meals.push({ start: new Date(eveS), end: new Date(eveE) });
-    const breaks =
-      breakStart && breakEnd ? [{ start: new Date(breakStart), end: new Date(breakEnd) }] : [];
-    const acc = computeAccountingDate(new Date(start), new Date(end), meals, breaks);
-    setDayType(dayTypeFromAccountingDate(acc));
-  }, [start, end, noonS, noonE, eveS, eveE, breakStart, breakEnd]);
+  /* Constructions Date à partir de date+heure */
+  const startDT = useMemo(() => {
+    if (!startDate || !isValidHHMM(startTime)) return null;
+    const [h,m] = startTime.split(":").map(Number);
+    return new Date(`${startDate}T${pad(h)}:${pad(m)}`);
+  }, [startDate, startTime]);
 
-  // Calcul principal
+  const endDT = useMemo(() => {
+    if (!endDate || !isValidHHMM(endTime)) return null;
+    const [h,m] = endTime.split(":").map(Number);
+    return new Date(`${endDate}T${pad(h)}:${pad(m)}`);
+  }, [endDate, endTime]);
+
+  const breakStartDT = useMemo(() => {
+    if (!breakDate || !isValidHHMM(breakStartTime)) return null;
+    const [h,m] = breakStartTime.split(":").map(Number);
+    return new Date(`${breakDate}T${pad(h)}:${pad(m)}`);
+  }, [breakDate, breakStartTime]);
+
+  const breakEndDT = useMemo(() => {
+    if (!breakDate || !isValidHHMM(breakEndTime)) return null;
+    const [h,m] = breakEndTime.split(":").map(Number);
+    return new Date(`${breakDate}T${pad(h)}:${pad(m)}`);
+  }, [breakDate, breakEndTime]);
+
+  const noonStartDT = useMemo(() => {
+    if (!noonDate || !isValidHHMM(noonStart)) return null;
+    const [h,m] = noonStart.split(":").map(Number);
+    return new Date(`${noonDate}T${pad(h)}:${pad(m)}`);
+  }, [noonDate, noonStart]);
+
+  const eveStartDT = useMemo(() => {
+    if (!eveDate || !isValidHHMM(eveStart)) return null;
+    const [h,m] = eveStart.split(":").map(Number);
+    return new Date(`${eveDate}T${pad(h)}:${pad(m)}`);
+  }, [eveDate, eveStart]);
+
+  /* Recalcul TSr (journée comptable) */
+  useEffect(() => {
+    if (!startDT || !endDT) return;
+    const meals: Array<{start:Date; end:Date}> = [];
+    if (noonStartDT) meals.push({ start: noonStartDT, end: addMinutes(noonStartDT, 60) });
+    if (eveStartDT)  meals.push({ start: eveStartDT,  end: addMinutes(eveStartDT,  60) });
+    const breaks = (breakStartDT && breakEndDT) ? [{ start: breakStartDT, end: breakEndDT }] : [];
+    const acc = computeAccountingDate(startDT, endDT, meals, breaks);
+    setDayType(dayTypeFromAccountingDate(acc));
+  }, [startDT, endDT, noonStartDT, eveStartDT, breakStartDT, breakEndDT]);
+
+  /* Calcul principal */
   const out = useMemo(() => {
-    if (!start || !end) return null;
+    if (!startDT || !endDT) return null;
     return compute({
-      date: new Date(start),
-      start: new Date(start),
-      end: new Date(end),
-      theBreak:
-        breakStart && breakEnd
-          ? { start: new Date(breakStart), end: new Date(breakEnd) }
-          : undefined,
-      mealNoon: noonS ? { start: new Date(noonS), end: new Date(noonE) } : undefined,
-      mealEvening: eveS ? { start: new Date(eveS), end: new Date(eveE) } : undefined,
+      date: startDT,
+      start: startDT,
+      end: endDT,
+      theBreak: breakStartDT && breakEndDT ? { start: breakStartDT, end: breakEndDT } : undefined,
+      mealNoon: noonStartDT ? { start: noonStartDT, end: addMinutes(noonStartDT,60) } : undefined,
+      mealEvening: eveStartDT ? { start: eveStartDT, end: addMinutes(eveStartDT,60) } : undefined,
       dayType,
     });
-  }, [start, end, breakStart, breakEnd, noonS, noonE, eveS, eveE, dayType]);
+  }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, eveStartDT, dayType]);
 
-  // Libellés & facteur (pour majorées)
-  const HS_label = dayType === "RH" ? "HSD" : "HS";
+  /* Libellés & calculs d’affichage */
+  const HS_label  = dayType === "RH" ? "HSD" : "HS";
   const HSM_label = dayType === "RH" ? "HDM" : "HSM";
-  const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
+  const factor    = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
 
-  // Répartition
   const nonMaj = out ? Math.min(out.A_hours, out.B_total_h) : 0;
-  const maj = out ? Math.max(0, out.B_total_h - nonMaj) : 0;
+  const maj    = out ? Math.max(0, out.B_total_h - nonMaj) : 0;
 
-  // Comparateur minutes-only
-  const cmp =
-    out && (out.Amin_min % 60) > (out.Bmin_min % 60)
-      ? ">"
-      : out && (out.Amin_min % 60) < (out.Bmin_min % 60)
-      ? "<"
-      : "=";
+  const cmp = out
+    ? (out.Amin_min % 60) > (out.Bmin_min % 60) ? ">" :
+      (out.Amin_min % 60) < (out.Bmin_min % 60) ? "<" : "="
+    : "=";
 
-  // styles
-  const box: React.CSSProperties = { margin: "16px auto", maxWidth: 900, padding: 16, fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
+  /* Styles */
+  const box: React.CSSProperties  = { margin: "16px auto", maxWidth: 900, padding: 16, fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
   const card: React.CSSProperties = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 };
   const row2: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 };
   const row3: React.CSSProperties = { display: "grid", gridTemplateColumns: "auto 1fr", gap: 6 };
-  const btn: React.CSSProperties = { padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" };
+  const btn: React.CSSProperties  = { padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" };
+  const inputHourProps = { inputMode: "numeric" as const, pattern:"[0-9]*", placeholder:"HH:MM", maxLength:5 };
 
-  // Tout effacer
+  /* Effacer tout */
   function clearAll() {
-    setStart(""); setEnd("");
-    setBreakStart(""); setBreakEnd("");
-    setNoonS(""); setEveS("");
+    setStartDate(""); setStartTime("");
+    setEndDate(""); setEndTime("");
+    setBreakDate(""); setBreakStartTime(""); setBreakEndTime("");
+    setNoonDate(""); setNoonStart("");
+    setEveDate(""); setEveStart("");
     setDayType("SO");
   }
 
   return (
     <div style={box}>
-      {/* barre supérieure */}
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
         <button style={btn} onClick={clearAll}>Tout effacer</button>
       </div>
 
-      {/* FORMULAIRE */}
+      {/* --- Formulaire --- */}
       <div style={{ ...card, display: "grid", gap: 12 }}>
+        {/* Prise de service */}
         <div>
           <label>Prise de service</label>
           <div style={row2}>
-            <input type="datetime-local" value={start} onChange={e => setStart(e.target.value)}/>
-            <button style={btn} onClick={() => setStart(toLocal(new Date()))}>Maintenant</button>
+            <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+            <input
+              {...inputHourProps}
+              value={startTime}
+              onChange={e=>setStartTime(normalizeHHMM(e.target.value))}
+            />
           </div>
         </div>
 
+        {/* Fin de service */}
         <div>
           <label>Fin de service</label>
           <div style={row2}>
-            <input type="datetime-local" value={end} onChange={e => setEnd(e.target.value)}/>
-            <button style={btn} onClick={() => setEnd(toLocal(new Date()))}>Maintenant</button>
+            <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} />
+            <input
+              {...inputHourProps}
+              value={endTime}
+              onChange={e=>setEndTime(normalizeHHMM(e.target.value))}
+            />
           </div>
         </div>
 
@@ -153,11 +198,14 @@ export default function App() {
         <div>
           <div style={{ marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
             <span>Coupure</span>
-            <button style={btn} onClick={() => { setBreakStart(""); setBreakEnd(""); }}>Effacer</button>
+            <button style={btn} onClick={()=>{ setBreakDate(""); setBreakStartTime(""); setBreakEndTime(""); }}>Effacer</button>
           </div>
           <div style={row2}>
-            <input type="datetime-local" value={breakStart} onChange={e => setBreakStart(e.target.value)}/>
-            <input type="datetime-local" value={breakEnd} onChange={e => setBreakEnd(e.target.value)}/>
+            <input type="date" value={breakDate} onChange={e=>setBreakDate(e.target.value)} />
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+              <input {...inputHourProps} value={breakStartTime} onChange={e=>setBreakStartTime(normalizeHHMM(e.target.value))} />
+              <input {...inputHourProps} value={breakEndTime} onChange={e=>setBreakEndTime(normalizeHHMM(e.target.value))} />
+            </div>
           </div>
         </div>
 
@@ -165,11 +213,14 @@ export default function App() {
         <div>
           <div style={{ marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
             <span>Repas méridien</span>
-            <button style={btn} onClick={() => setNoonS("")}>Effacer</button>
+            <button style={btn} onClick={()=>{ setNoonDate(""); setNoonStart(""); }}>Effacer</button>
           </div>
           <div style={row2}>
-            <input type="datetime-local" value={noonS} onChange={e => setNoonS(e.target.value)}/>
-            <input type="datetime-local" value={noonE} disabled />
+            <input type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} />
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+              <input {...inputHourProps} value={noonStart} onChange={e=>setNoonStart(normalizeHHMM(e.target.value))} />
+              <input type="datetime-local" value={plus1hFrom(noonDate, noonStart)} disabled />
+            </div>
           </div>
         </div>
 
@@ -177,11 +228,14 @@ export default function App() {
         <div>
           <div style={{ marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
             <span>Repas vespéral</span>
-            <button style={btn} onClick={() => setEveS("")}>Effacer</button>
+            <button style={btn} onClick={()=>{ setEveDate(""); setEveStart(""); }}>Effacer</button>
           </div>
           <div style={row2}>
-            <input type="datetime-local" value={eveS} onChange={e => setEveS(e.target.value)}/>
-            <input type="datetime-local" value={eveE} disabled />
+            <input type="date" value={eveDate} onChange={e=>setEveDate(e.target.value)} />
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+              <input {...inputHourProps} value={eveStart} onChange={e=>setEveStart(normalizeHHMM(e.target.value))} />
+              <input type="datetime-local" value={plus1hFrom(eveDate, eveStart)} disabled />
+            </div>
           </div>
         </div>
       </div>
@@ -193,32 +247,32 @@ export default function App() {
         </div>
       )}
 
-      {/* REPÈRES */}
+      {/* Repères */}
       {out && (
         <div style={{ ...card, marginTop: 12 }}>
           <div style={row2}>
             <div>DMJ atteinte à</div>
-            <div>{fmtSmart(out.dmjEnd, start, end)}</div>
+            <div>{fmtSmart(out.dmjEnd, startDT!, endDT!)}</div>
 
             <div>Amplitude atteinte à</div>
-            <div>{fmtSmart(out.t13, start, end)}</div>
+            <div>{fmtSmart(out.t13, startDT!, endDT!)}</div>
 
             <div>Dépassement total</div>
             <div>
-              {asHM(out.Bmin_min)} → <strong style={{color:"#b91c1c"}}>{asHMstrict(out.B_total_h * 60)}</strong>
+              {asHM(out.Bmin_min)} → <strong style={{color:"#b91c1c"}}>{asHMstrict(out.B_total_h*60)}</strong>
             </div>
           </div>
         </div>
       )}
 
-      {/* AMIN / BMIN */}
+      {/* Amin / Bmin */}
       {out && (
         <div style={{ ...card, marginTop: 12 }}>
           <div style={row2}>
             <div>Amin</div>
-            <div>{Math.floor(out.Amin_min / 60)} h <strong>{String(out.Amin_min % 60).padStart(2,"0")}</strong></div>
+            <div>{Math.floor(out.Amin_min/60)} h <strong>{pad(out.Amin_min%60)}</strong></div>
             <div>Bmin</div>
-            <div>{Math.floor(out.Bmin_min / 60)} h <strong>{String(out.Bmin_min % 60).padStart(2,"0")}</strong></div>
+            <div>{Math.floor(out.Bmin_min/60)} h <strong>{pad(out.Bmin_min%60)}</strong></div>
           </div>
           <div style={{ marginTop: 8, textAlign: "center", fontSize: 18 }}>
             Amin {cmp} Bmin
@@ -226,14 +280,14 @@ export default function App() {
         </div>
       )}
 
-      {/* VENTILATION / RÉPARTITION */}
+      {/* Ventilation / Répartition */}
       {out && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div style={{ ...card, marginTop: 12 }}>
             <div style={{ fontWeight: 600, marginBottom: 8 }}>Ventilation des heures</div>
             <div style={row3}>
               <div>{nonMaj} {HS_label}</div><div />
-              {maj > 0 && (<><div>1 HS × {factor * 100}% soit</div><div>{maj} {HSM_label} ({dayType})</div></>)}
+              {maj>0 && (<><div>1 HS × {factor*100}% soit</div><div>{maj} {HSM_label} ({dayType})</div></>)}
             </div>
           </div>
 
@@ -241,10 +295,10 @@ export default function App() {
             <div style={{ fontWeight: 600, marginBottom: 8 }}>Répartition des heures</div>
             <div style={row3}>
               <div>{nonMaj} {HS_label}</div><div />
-              {maj > 0 && (<><div>{maj} {HSM_label}</div><div /></>)}
+              {maj>0 && (<><div>{maj} {HSM_label}</div><div /></>)}
             </div>
             <div style={{ marginTop: 8, color: "#b91c1c", fontWeight: 600 }}>
-              {dayType === "R" && "Crédit de 1 RCJ au titre du DP sur le R"}
+              {dayType === "R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
               {dayType === "RH" && "Crédit de 1,5 RCJ ou 2 RCJ + 1 RL au titre du DP sur le RH"}
             </div>
           </div>
