@@ -394,13 +394,14 @@ export default function App() {
       {/* --- Frise explicative --- */}
 {out && (
   <div style={{ ...card, marginTop: 12 }}>
-    <Frise
+    <FriseTimeline
       start={startDT!}
       dmj={out.dmjEnd}
       t13={out.t13}
       end={endDT!}
       nonMajHours={nonMaj}
       majHours={maj}
+      dayType={dayType}
     />
   </div>
 )}
@@ -411,53 +412,86 @@ export default function App() {
       </div>
     </div>
   );
-  /* ============ Frise simple ============ */
-function Frise(props: { start: Date; dmj: Date; t13: Date; end: Date; nonMajHours: number; majHours: number; }) {
-  const cellW = 40; // largeur d’une heure
-  const cellH = 24;
+/* ============ Frise chronologique ============ */
+function FriseTimeline(props: {
+  start: Date;         // PDS
+  dmj: Date;           // fin DMJ
+  t13: Date;           // début amplitude
+  end: Date;           // FDS (pas indispensable pour la frise)
+  nonMajHours: number; // HS/HSN (non majorées) à partir de DMJ
+  majHours: number;    // HSM/HNM à partir de t13 (amplitude)
+  dayType: DayType;    // pour les libellés (HS/HSD, HSM/HDM)
+}) {
+  const W = 500;        // largeur mini du tracé
+  const H = 110;        // hauteur totale
+  const PADL = 80;      // marge gauche (pour le libellé de ligne)
+  const PADR = 16;
+  const Y1 = 28;        // y de la ligne 1
+  const Y2 = 78;        // y de la ligne 2
+  const gap = 44;       // espace entre lignes
 
-  function hourLabel(d: Date) {
-    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  const topLabel = props.dayType === "RH" ? "HSD / HSN" : "HS / HSN";
+  const botLabel = props.dayType === "RH" ? "HDM / HNM" : "HSM / HNM";
+
+  const hourW = 56; // distance visuelle entre deux heures (traits)
+  const lineLenTop = Math.max(1, props.nonMajHours) * hourW;
+  const lineLenBot = Math.max(1, props.majHours) * hourW;
+
+  function hm(d: Date) {
+    const h = String(d.getHours()).padStart(2, "0");
+    const m = String(d.getMinutes()).padStart(2, "0");
+    return `${h}:${m}`;
   }
-
   function isNight(d: Date) {
     const h = d.getHours();
-    return (h >= 21 || h < 6);
+    return h >= 21 || h < 6;
+  }
+  function tick(x: number, y: number, label: string, night: boolean) {
+    return (
+      <g>
+        <line x1={x} y1={y - 12} x2={x} y2={y + 12} stroke={night ? "#dc2626" : "#111827"} strokeWidth="2" />
+        <text x={x} y={y + 22} textAnchor="middle" fontSize="12" fill={night ? "#dc2626" : "#111827"}>
+          {label}
+        </text>
+      </g>
+    );
   }
 
-  // ligne 1 : heures sup de base depuis DMJ
-  const hsRects = Array.from({length: props.nonMajHours}).map((_,i)=>{
-    const h = new Date(props.dmj.getTime() + i*3600000);
-    return (
-      <g key={`hs-${i}`}>
-        <rect x={i*cellW} y={0} width={cellW-2} height={cellH} rx={4} ry={4}
-              fill={isNight(h) ? "#fca5a5" : "#e5e7eb"} stroke="#9ca3af"/>
-        <text x={i*cellW+cellW/2} y={cellH/2+4} textAnchor="middle" fontSize="12">{hourLabel(h)}</text>
-      </g>
-    );
-  });
-
-  // ligne 2 : heures maj depuis amplitude
-  const majRects = Array.from({length: props.majHours}).map((_,i)=>{
-    const h = new Date(props.t13.getTime() + i*3600000);
-    return (
-      <g key={`maj-${i}`}>
-        <rect x={i*cellW} y={cellH+10} width={cellW-2} height={cellH} rx={4} ry={4}
-              fill={isNight(h) ? "#fca5a5" : "#fde68a"} stroke="#9ca3af"/>
-        <text x={i*cellW+cellW/2} y={cellH+10+cellH/2+4} textAnchor="middle" fontSize="12">{hourLabel(h)}</text>
-      </g>
-    );
-  });
-
-  const totalW = Math.max(props.nonMajHours, props.majHours) * cellW;
-
   return (
-    <svg width="100%" height={cellH*2+20} viewBox={`0 0 ${Math.max(totalW, cellW*6)} ${cellH*2+20}`}>
-      <text x="0" y={cellH/2} fontSize="12" fill="#374151">HS (DMJ→)</text>
-      <g transform="translate(80,0)">{hsRects}</g>
-      <text x="0" y={cellH+cellH/2+10} fontSize="12" fill="#374151">Maj (Amplitude→)</text>
-      <g transform="translate(80,0)">{majRects}</g>
+    <svg width="100%" height={props.majHours > 0 ? H : H - gap} viewBox={`0 0 ${Math.max(W, PADL + PADR + Math.max(lineLenTop, lineLenBot))} ${props.majHours > 0 ? H : H - gap}`}>
+
+      {/* ===== Ligne 1 : HS / HSN depuis DMJ, avec repère PDS ===== */}
+      <text x={12} y={Y1 + 4} fontSize="12" fill="#374151">{topLabel}</text>
+      {/* base */}
+      <line x1={PADL} y1={Y1} x2={PADL + lineLenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
+      {/* PDS */}
+      {tick(PADL - 40, Y1, hm(props.start), isNight(props.start))}
+      <line x1={PADL - 40} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
+      {/* DMJ */}
+      {tick(PADL, Y1, hm(props.dmj), isNight(props.dmj))}
+      {/* heures distribuées */}
+      {Array.from({ length: props.nonMajHours }).map((_, i) => {
+        const t = new Date(props.dmj.getTime() + i * 3600000);
+        const x = PADL + (i + 1) * hourW;
+        return tick(x, Y1, hm(t), isNight(t));
+      })}
+
+      {/* ===== Ligne 2 : HSM / HNM (ou HDM / HNM) depuis amplitude ===== */}
+      {props.majHours > 0 && (
+        <>
+          <text x={12} y={Y2 + 4} fontSize="12" fill="#374151">{botLabel}</text>
+          {/* base */}
+          <line x1={PADL} y1={Y2} x2={PADL + lineLenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
+          {/* Amplitude (t13) */}
+          {tick(PADL, Y2, hm(props.t13), isNight(props.t13))}
+          {/* heures majorées distribuées */}
+          {Array.from({ length: props.majHours }).map((_, i) => {
+            const t = new Date(props.t13.getTime() + i * 3600000);
+            const x = PADL + (i + 1) * hourW;
+            return tick(x, Y2, hm(t), isNight(t));
+          })}
+        </>
+      )}
     </svg>
   );
-}
 }
