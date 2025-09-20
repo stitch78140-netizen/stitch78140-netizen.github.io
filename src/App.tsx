@@ -1,74 +1,181 @@
 import { useMemo, useState } from "react";
-import { compute, addMin, isFullNightHour, type DayType } from "./modules/civils";
 
-// ------- helpers UI -------
+/* =======================
+   Utils & Calculs (inline)
+   ======================= */
+type DayType = 'SO' | 'R' | 'RH';
+interface Meal { start?: Date; end?: Date }
+interface Break { start?: Date; end?: Date }
+interface Input {
+  start: Date; end: Date;
+  mealNoon?: Meal; mealEvening?: Meal; theBreak?: Break;
+  dayType: DayType;
+}
+interface Output {
+  dmjEnd: Date; t13: Date;
+  Bmin_min: number; Amin_min: number;
+  A_hours: number; B_total_h: number;
+  HS: number; HSN: number; HSM: number; HNM: number;
+}
+
+const minutesBetween = (a: Date, b: Date)=> Math.max(0, Math.round((b.getTime()-a.getTime())/60000));
+const addMin = (d: Date, m: number)=> new Date(d.getTime()+m*60000);
+const ceilH = (m: number)=> m<=0 ? 0 : (m%60? Math.floor(m/60)+1 : Math.floor(m/60));
+
+function normalize(ints: Array<{start:Date; end:Date}>){
+  if(!ints.length) return [] as Array<{start:Date; end:Date}>;
+  ints.sort((a,b)=> a.start.getTime()-b.start.getTime());
+  const out=[{...ints[0]}];
+  for(let i=1;i<ints.length;i++){
+    const p=out[out.length-1], c=ints[i];
+    if(c.start<=p.end) p.end=new Date(Math.max(p.end.getTime(), c.end.getTime()));
+    else out.push({...c});
+  }
+  return out;
+}
+function subtract(baseStart: Date, baseEnd: Date, remove: Array<{start:Date; end:Date}>){
+  const clipped = remove
+    .map(r=>({start:new Date(Math.max(r.start.getTime(), baseStart.getTime())),
+               end:new Date(Math.min(r.end.getTime(), baseEnd.getTime()))}))
+    .filter(r=> r.end>baseStart && r.start<baseEnd);
+  const rem = normalize(clipped);
+  const segs: Array<{start:Date; end:Date}>=[]; let cur=new Date(baseStart);
+  for(const r of rem){ if(r.start>cur) segs.push({start:cur,end:r.start}); if(r.end>cur) cur=new Date(r.end); }
+  if(cur<baseEnd) segs.push({start:cur,end:baseEnd});
+  return segs;
+}
+
+// DMJ = 7h48 effectif (repas + coupure repoussent si elles la chevauchent)
+function computeDMJ(start: Date, pauses: Array<{start:Date; end:Date}>, targetMin=468){
+  const merged = normalize(pauses);
+  const endWindow = addMin(start, 2*24*60);
+  const segs: Array<{start:Date; end:Date}>=[]; let cur=new Date(start);
+  for(const r of merged){ if(r.start>cur) segs.push({start:cur,end:r.start}); if(r.end>cur) cur=new Date(r.end); }
+  segs.push({start:cur,end:endWindow});
+  let rest = targetMin;
+  for(const s of segs){ const d=minutesBetween(s.start,s.end);
+    if(d>=rest) return addMin(s.start, rest);
+    rest-=d;
+  }
+  return endWindow;
+}
+
+// Nuit = heure ENTIEREMENT dans [21:00,06:00)
+function isFullNightHour(s: Date, e: Date){
+  const spans: Array<{sd:Date; ed:Date}>=[]; const midnight = new Date(s); midnight.setHours(24,0,0,0);
+  if(e<=midnight) spans.push({sd:s,ed:e}); else { spans.push({sd:s,ed:midnight}); spans.push({sd:midnight,ed:e}); }
+  for(const sp of spans){
+    const d0 = new Date(sp.sd); d0.setHours(0,0,0,0);
+    const h06=new Date(d0); h06.setHours(6,0,0,0);
+    const h21=new Date(d0); h21.setHours(21,0,0,0);
+    const interStart = new Date(Math.max(sp.sd.getTime(), h06.getTime()));
+    const interEnd   = new Date(Math.min(sp.ed.getTime(), h21.getTime()));
+    if(interEnd>interStart) return false;
+  }
+  return true;
+}
+
+// Calcul principal
+function compute(input: Input): Output {
+  const start=input.start, end=input.end;
+  const t13 = addMin(start, 13*60);
+
+  const meals: Array<{start:Date; end:Date}>=[];
+  if(input.mealNoon?.start && input.mealNoon?.end) meals.push({start:input.mealNoon.start, end:input.mealNoon.end});
+  if(input.mealEvening?.start && input.mealEvening?.end) meals.push({start:input.mealEvening.start, end:input.mealEvening.end});
+  const breaks: Array<{start:Date; end:Date}> = input.theBreak?.start && input.theBreak?.end ? [{start:input.theBreak.start, end:input.theBreak.end}] : [];
+  const allPauses = meals.concat(breaks);
+
+  const dmjEnd = computeDMJ(start, allPauses);
+
+  // Bmin = effectif après DMJ (repas + coupure déduits)
+  const Bmin_min = subtract(dmjEnd, end, allPauses).reduce((a,s)=> a+minutesBetween(s.start,s.end), 0);
+  // Amin = effectif entre DMJ et 13h (déduit UNIQUEMENT la coupure)
+  const Amin_min = subtract(dmjEnd, t13, breaks).reduce((a,s)=> a+minutesBetween(s.start,s.end), 0);
+
+  // Arbitrage minutes-only
+  const A_hours = (Amin_min%60) > (Bmin_min%60) ? Math.ceil(Amin_min/60) : Math.floor(Amin_min/60);
+  const B_total_h = ceilH(Bmin_min);
+
+  // Répartition
+  const nonMaj = Math.min(A_hours, B_total_h);
+  const maj    = Math.max(0, B_total_h - nonMaj);
+
+  let HS=0, HSN=0, HSM=0, HNM=0;
+
+  // Non majorées (depuis DMJ)
+  let cur = new Date(dmjEnd);
+  for (let i = 0; i < nonMaj; i++) {
+    const s = new Date(cur), e = addMin(s, 60);
+    if (isFullNightHour(s, e)) { HSN++; } else { HS++; }
+    cur = e;
+  }
+
+  // Majorées (depuis t13)
+  cur = new Date(t13);
+  for (let i = 0; i < maj; i++) {
+    const s = new Date(cur), e = addMin(s, 60);
+    if (isFullNightHour(s, e)) { HNM++; } else { HSM++; }
+    cur = e;
+  }
+
+  return { dmjEnd, t13, Bmin_min, Amin_min, A_hours, B_total_h, HS, HSN, HSM, HNM };
+}
+
+/* =======================
+   UI helpers/styles
+   ======================= */
 const fmtHM = (d?: Date) => d ? `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}` : "";
-const fmtHhmm = (m: number) => {
-  const h = Math.floor(Math.max(0,m)/60), mm = Math.max(0,m)%60;
-  return `${String(h).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
-};
+const fmtHhmm = (m: number) => `${String(Math.floor(Math.max(0,m)/60)).padStart(2,"0")}:${String(Math.max(0,m)%60).padStart(2,"0")}`;
 const bold = (s: React.ReactNode)=> <span style={{fontWeight:700}}>{s}</span>;
 const card: React.CSSProperties = { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:12 };
 const row3: React.CSSProperties = { display:"grid", gridTemplateColumns:"auto 6px 1fr", rowGap:6 };
 
-// --------- inputs ----------
 type TimePair = { date?: Date; time?: string };
 type Range = { date?: Date; start?: string; end?: string };
 
+/* =======================
+   Component
+   ======================= */
 export default function App(){
   // PDS/FDS
   const [pds, setPds] = useState<TimePair>({});
   const [fds, setFds] = useState<TimePair>({});
   // coupure & repas
-  const [cut, setCut] = useState<Range>({});
+  const [cut, setCut]   = useState<Range>({});
   const [noon, setNoon] = useState<Range>({});
   const [eve , setEve ] = useState<Range>({});
 
-  // ----- setters & auto-date pour coupure/repas -----
   const autoDate = (d?: Date) => d ?? pds.date ?? fds.date;
+  const resetAll = () => { setPds({}); setFds({}); setCut({}); setNoon({}); setEve({}); };
 
-  // effacer tout
-  const resetAll = () => { setPds({}); setFds({}); setCut({}); setNoon({}); setEve({}); }
-
-  // --------- calculs ----------
-  // bâtit un Date à partir (date + "HH:MM")
+  // build Date from date + "HH:MM"
   const withTime = (date?: Date, hhmm?: string) => {
     if(!date || !hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return undefined;
     const d = new Date(date); const [h,m] = hhmm.split(":").map(Number); d.setHours(h,m,0,0); return d;
   };
 
-  // Jours TSR auto (simple): on prend le jour civil de la DMJ (clairement défini par la règle); puis:
-  // Samedi => "R", Dimanche => "RH", sinon "SO".
+  // Inputs
   const draftStart = withTime(pds.date, pds.time);
   const draftEnd   = withTime(fds.date, fds.time);
-  // pauses
+
+  // pauses (fin auto +1h si fin vide)
   const mealNoon = (noon.start && !noon.end) ? {start: withTime(autoDate(noon.date), noon.start), end: addMin(withTime(autoDate(noon.date), noon.start)!, 60)} :
                     (noon.start && noon.end) ? {start: withTime(autoDate(noon.date), noon.start), end: withTime(autoDate(noon.date), noon.end)} : undefined;
   const mealEve  = (eve.start && !eve.end) ? {start: withTime(autoDate(eve.date), eve.start), end: addMin(withTime(autoDate(eve.date), eve.start)!, 60)} :
                     (eve.start && eve.end) ? {start: withTime(autoDate(eve.date), eve.start), end: withTime(autoDate(eve.date), eve.end)} : undefined;
   const theBreak = (cut.start && cut.end) ? { start: withTime(autoDate(cut.date), cut.start), end: withTime(autoDate(cut.date), cut.end) } : undefined;
 
+  // Calculs + TSR auto depuis le jour de DMJ
   const out = useMemo(() => {
     if(!draftStart || !draftEnd) return null;
-
-    // DMJ provisoire pour déterminer le TSR/jour
-    const tmp = compute({
-      start: draftStart, end: draftEnd,
-      mealNoon, mealEvening: mealEve, theBreak,
-      dayType: "SO"
-    });
-    const dmjDay = new Date(tmp.dmjEnd); const wd = dmjDay.getDay();
+    const tmp = compute({ start: draftStart, end: draftEnd, mealNoon, mealEvening: mealEve, theBreak, dayType: "SO" });
+    const wd = new Date(tmp.dmjEnd).getDay();
     const dayType: DayType = wd===6 ? "R" : wd===0 ? "RH" : "SO";
-
-    return compute({
-      start: draftStart, end: draftEnd,
-      mealNoon, mealEvening: mealEve, theBreak,
-      dayType
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return compute({ start: draftStart, end: draftEnd, mealNoon, mealEvening: mealEve, theBreak, dayType });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(pds), JSON.stringify(fds), JSON.stringify(cut), JSON.stringify(noon), JSON.stringify(eve)]);
 
-  // infos d'affichage
   const dayType: DayType = useMemo(()=>{
     if(!out) return "SO";
     const wd = new Date(out.dmjEnd).getDay();
@@ -77,8 +184,6 @@ export default function App(){
 
   const nonMaj = out ? Math.min(out.A_hours, out.B_total_h) : 0; // A
   const reste  = out ? Math.max(0, out.B_total_h - nonMaj) : 0;  // B arrondi - A
-
-  // facteurs de majoration (heures créditées)
   const factor = (t: DayType) => t==="SO" ? 1.5 : t==="R" ? 2 : 3;
 
   return (
@@ -110,9 +215,7 @@ export default function App(){
           <div style={{textAlign:"center"}}>–</div>
           <input inputMode="numeric" placeholder="HH:MM" value={cut.end??""} onChange={e=>setCut(s=>({...s, date: autoDate(s.date), end: sanitizeHM(e.target.value)}))}/>
         </div>
-        <div style={{marginTop:6}}>
-          <button onClick={()=>setCut({})}>Effacer</button>
-        </div>
+        <div style={{marginTop:6}}><button onClick={()=>setCut({})}>Effacer</button></div>
 
         {/* Repas midi */}
         <div style={{marginTop:12}}>Repas méridien (fin auto +1h si fin vide)</div>
@@ -121,9 +224,7 @@ export default function App(){
           <input inputMode="numeric" placeholder="HH:MM" value={noon.start??""} onChange={e=>setNoon(s=>({...s, date:autoDate(s.date), start:sanitizeHM(e.target.value)}))}/>
           <input inputMode="numeric" placeholder="HH:MM" value={noon.end??""}   onChange={e=>setNoon(s=>({...s, date:autoDate(s.date), end  :sanitizeHM(e.target.value)}))}/>
         </div>
-        <div style={{marginTop:6}}>
-          <button onClick={()=>setNoon({})}>Effacer</button>
-        </div>
+        <div style={{marginTop:6}}><button onClick={()=>setNoon({})}>Effacer</button></div>
 
         {/* Repas soir */}
         <div style={{marginTop:12}}>Repas vespéral (fin auto +1h si fin vide)</div>
@@ -132,10 +233,7 @@ export default function App(){
           <input inputMode="numeric" placeholder="HH:MM" value={eve.start??""} onChange={e=>setEve(s=>({...s, date:autoDate(s.date), start:sanitizeHM(e.target.value)}))}/>
           <input inputMode="numeric" placeholder="HH:MM" value={eve.end??""}   onChange={e=>setEve(s=>({...s, date:autoDate(s.date), end  :sanitizeHM(e.target.value)}))}/>
         </div>
-        <div style={{marginTop:6, display:"flex", gap:8, justifyContent:"space-between"}}>
-          <div> </div>
-          <button onClick={()=>setEve({})}>Effacer</button>
-        </div>
+        <div style={{marginTop:6}}><button onClick={()=>setEve({})}>Effacer</button></div>
 
         <div style={{textAlign:"right", marginTop:12}}>
           <button onClick={resetAll}>Tout effacer</button>
@@ -205,7 +303,6 @@ export default function App(){
                   </li>
                 )}
               </ul>
-
               <div style={{ marginTop: 8, color: "#b91c1c", fontWeight: 600 }}>
                 {dayType === "R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
                 {dayType === "RH" && "Crédit de 1,5 RCJ ou 2 RCJ + 1 RL au titre du DP sur le RH"}
@@ -232,7 +329,9 @@ export default function App(){
   );
 }
 
-// -------- frises SVG (sans acronymes dans les titres) --------
+/* =======================
+   Frises SVG
+   ======================= */
 function Frises(props: { dmj: Date; t13: Date; nonMajHours: number; majHours: number; }) {
   const cellW = 44, cellH = 18, padTop = 22;
   const HH = (d: Date) => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
@@ -284,9 +383,10 @@ function Frises(props: { dmj: Date; t13: Date; nonMajHours: number; majHours: nu
   );
 }
 
-// --------- saisie HHMM -> HH:MM ---------
+/* =======================
+   Saisie "1725" -> "17:25"
+   ======================= */
 function sanitizeHM(raw: string){
-  // autorise "750" -> 07:50, "7:5" -> 07:05, etc.
   const s = raw.replace(/[^\d:]/g,"");
   if(s.includes(":")){
     const [h,m] = s.split(":");
