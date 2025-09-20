@@ -180,3 +180,6 @@ export function dayTypeFromAccountingDate(accountingDate: Date): DayType {
   if(dow===0) return 'RH';
   return 'SO';
 }
+  export { computeAccountingDate, dayTypeFromAccountingDate };
+}
+
