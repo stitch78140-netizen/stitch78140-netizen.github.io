@@ -414,110 +414,142 @@ export default function App() {
   );
 } // <-- close App component here
 
-/* ============ Frise chronologique ============ */
+/* ============ Frise chronologique (acronymes sur la ligne) ============ */
 function FriseTimeline(props: {
-  start: Date; dmj: Date; t13: Date; end: Date;
-  nonMajHours: number; majHours: number; dayType: "SO" | "R" | "RH";
+  start: Date;         // PDS
+  dmj: Date;           // fin DMJ
+  t13: Date;           // début amplitude
+  end: Date;           // FDS (pas indispensable pour la frise)
+  nonMajHours: number; // HS/HSN (non majorées) à partir de DMJ
+  majHours: number;    // HSM/HDM/HNM à partir de t13 (amplitude)
+  dayType: DayType;    // pour les libellés (HSM ↔ HDM)
 }) {
-  const hm = (d: Date) =>
-    `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  const W = 520;        // largeur mini
+  const H = 150;        // hauteur totale
+  const PADL = 58;      // marge gauche
+  const PADR = 16;
+  const Y1 = 62;        // y de la ligne 1
+  const Y2 = 116;       // y de la ligne 2
+  const hourW = 56;     // distance entre deux heures
 
-  // Une heure complète est "nuit" si le créneau [t, t+1h) est entièrement dans 21:00–06:00.
-  function isFullNightHour(s: Date): boolean {
-    const m = s.getHours()*60 + s.getMinutes();
-    const e = (m + 60) % (24*60);
-    const crossMid = m + 60 >= 24*60;
-    if (m >= 21*60) return true;             // 21:00 → minuit
-    if (m < 6*60 && !crossMid && e <= 6*60)  // 00:00–06:00
-      return true;
-    return false;
+  const labelMajDay = props.dayType === "RH" ? "HDM" : "HSM";
+
+  const fmt = (d: Date) =>
+    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+  // Une heure entière est « nuit » si [s,e] est entièrement dans [21:00,06:00) (en tenant le passage minuit).
+  function isFullNightHour(s: Date, e: Date) {
+    const spans: Array<{ sd: Date; ed: Date }> = [];
+    const mid = new Date(s); mid.setHours(24, 0, 0, 0);
+    if (e <= mid) spans.push({ sd: s, ed: e }); else { spans.push({ sd: s, ed: mid }); spans.push({ sd: mid, ed: e }); }
+    for (const sp of spans) {
+      const d0 = new Date(sp.sd); d0.setHours(0, 0, 0, 0);
+      const h06 = new Date(d0); h06.setHours(6, 0, 0, 0);
+      const h21 = new Date(d0); h21.setHours(21, 0, 0, 0);
+      const interStart = new Date(Math.max(sp.sd.getTime(), h06.getTime()));
+      const interEnd   = new Date(Math.min(sp.ed.getTime(), h21.getTime()));
+      if (interEnd > interStart) return false; // il y a du jour
+    }
+    return true;
   }
 
-  const DAY_NON_MAJ = props.dayType === "RH" ? "HSD" : "HS";
-  const DAY_MAJ     = props.dayType === "RH" ? "HDM" : "HSM";
-
-  const PADL = 90, PADR = 16;
-  const hourW = 56;
-  const lenTop = Math.max(1, props.nonMajHours) * hourW;
-  const lenBot = Math.max(1, props.majHours) * hourW;
-
-  const HEADER_H = 24;
-  const TOP_H    = 84;
-  const BOT_H    = props.majHours > 0 ? 104 : 0;
-  const totalW   = Math.max(PADL + PADR + lenTop, PADL + PADR + lenBot, 440);
-  const totalH   = HEADER_H + TOP_H + BOT_H;
-
-  const Y1 = HEADER_H + 32;
-  const Y2 = props.majHours > 0 ? HEADER_H + TOP_H + 32 : 0;
-
-  const tick = (x: number, y: number, t: Date, labelAbove?: string) => (
-    <g>
-      {labelAbove && (
-        <text x={x} y={y-18} textAnchor="middle" fontSize="11" fill="#374151">
-          {labelAbove}
-        </text>
-      )}
-      <line x1={x} y1={y-12} x2={x} y2={y+12} stroke="#111827" strokeWidth="2" />
-      <text x={x} y={y+20} textAnchor="middle" fontSize="12" fill="#111827">
-        {hm(t)}
-      </text>
-    </g>
-  );
-
-  const acrBetween = (
-    x1: number, x2: number, y: number, tStart: Date, dayAcr: string, nightAcr: string
-  ) => {
-    const night = isFullNightHour(tStart);
-    const acr   = night ? nightAcr : dayAcr;
-    const color = night ? "#dc2626" : "#111827";
-    const xm = (x1 + x2) / 2;
-    // Acronymes remontés (plus proche de la ligne)
+  // Dessine un trait vertical + heure en dessous
+  function tick(x: number, y: number, label: string, night = false) {
     return (
-      <text x={xm} y={y+22} textAnchor="middle" fontSize="12" fontWeight="600" fill={color}>
-        {acr}
+      <g>
+        <line x1={x} y1={y - 12} x2={x} y2={y + 12}
+              stroke={night ? "#dc2626" : "#111827"} strokeWidth="2" />
+        <text x={x} y={y + 24} textAnchor="middle" fontSize="12"
+              fill={night ? "#dc2626" : "#111827"}>
+          {label}
+        </text>
+      </g>
+    );
+  }
+
+  // Texte centré sur le segment (entre deux traits)
+  function segAcronym(x1: number, x2: number, y: number, text: string, night = false) {
+    const cx = (x1 + x2) / 2;
+    return (
+      <text x={cx} y={y - 6} textAnchor="middle" fontSize="12"
+            fill={night ? "#dc2626" : "#111827"} fontWeight={600}>
+        {text}
       </text>
     );
-  };
+  }
+
+  // Longueurs de lignes (au moins 1 segment)
+  const lineLenTop = Math.max(1, props.nonMajHours) * hourW;
+  const lineLenBot = Math.max(1, props.majHours) * hourW;
+
+  const viewW = Math.max(W, PADL + PADR + Math.max(lineLenTop, lineLenBot));
+  const needLine2 = props.majHours > 0;
 
   return (
-    <svg width="100%" height={totalH} viewBox={`0 0 ${totalW} ${totalH}`}>
-      {/* Titre centré */}
-      <text x={totalW/2} y={16} fontSize="13" fontWeight="600" fill="#111827" textAnchor="middle">
+    <svg width="100%" height={needLine2 ? H : H - 44}
+         viewBox={`0 0 ${viewW} ${needLine2 ? H : H - 44}`}>
+
+      {/* Titre */}
+      <text x={viewW / 2} y={24} textAnchor="middle"
+            fontSize="14" fontWeight={700} fill="#111827">
         RÉPARTITION DES HEURES
       </text>
 
-      {/* Ligne 1 : HS/HSN depuis DMJ */}
-      <line x1={PADL} y1={Y1} x2={PADL + lenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
-      <line x1={PADL-48} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
-      {tick(PADL-48, Y1, props.start, "Pds")}
-      {tick(PADL,    Y1, props.dmj,   "DMJ")}
-      {Array.from({ length: Math.max(0, props.nonMajHours|0) }).map((_, i) => {
-        const segStart = new Date(props.dmj.getTime() + i*3600000);
-        const x1 = PADL + i*hourW;
-        const x2 = PADL + (i+1)*hourW;
-        const segEnd = new Date(segStart.getTime() + 3600000);
+      {/* ===== Ligne 1 : HS / HSN ===== */}
+      {/* libellés Pds / DMJ */}
+      <text x={PADL - 38} y={Y1 - 22} fontSize="12" fill="#374151">Pds</text>
+      <text x={PADL}       y={Y1 - 22} fontSize="12" fill="#374151" textAnchor="middle">DMJ</text>
+
+      {/* base */}
+      <line x1={PADL} y1={Y1} x2={PADL + lineLenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
+      {/* pds → dmj (pointillés) */}
+      <line x1={PADL - 40} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
+      {/* marqueurs Pds + DMJ */}
+      {tick(PADL - 40, Y1, fmt(props.start))}
+      {tick(PADL, Y1, fmt(props.dmj))}
+
+      {/* heures distribuées (segments + acronyme au milieu) */}
+      {Array.from({ length: props.nonMajHours }).map((_, i) => {
+        const s = new Date(props.dmj.getTime() + i * 3600000);
+        const e = new Date(s.getTime() + 3600000);
+        const x1 = PADL + i * hourW;
+        const x2 = PADL + (i + 1) * hourW;
+        const night = isFullNightHour(s, e);
+
         return (
-          <g key={`nm-${i}`}>
-            {tick(x2, Y1, segEnd)}
-            {acrBetween(x1, x2, Y1, segStart, DAY_NON_MAJ, "HSN")}
+          <g key={`top-${i}`}>
+            {/* trait de l’heure suivante + label heure */}
+            {tick(x2, Y1, fmt(e), night)}
+            {/* acronyme au milieu du segment */}
+            {segAcronym(x1, x2, Y1, night ? "HSN" : "HS", night)}
           </g>
         );
       })}
 
-      {/* Ligne 2 : HSM/HNM depuis Amplitude */}
-      {props.majHours > 0 && (
+      {/* ===== Ligne 2 : HSM/HDM / HNM ===== */}
+      {needLine2 && (
         <>
-          <line x1={PADL} y1={Y2} x2={PADL + lenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
-          {tick(PADL, Y2, props.t13, "Amplitude")}
-          {Array.from({ length: Math.max(0, props.majHours|0) }).map((_, i) => {
-            const segStart = new Date(props.t13.getTime() + i*3600000);
-            const x1 = PADL + i*hourW;
-            const x2 = PADL + (i+1)*hourW;
-            const segEnd = new Date(segStart.getTime() + 3600000);
+          {/* libellé Amplitude */}
+          <text x={PADL - 40} y={Y2 - 22} fontSize="12" fill="#374151">Amplitude</text>
+
+          {/* base */}
+          <line x1={PADL} y1={Y2} x2={PADL + lineLenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
+          {/* repère amplitude (t13) */}
+          {tick(PADL, Y2, fmt(props.t13))}
+
+          {/* heures majorées (segments + acronyme sur la ligne) */}
+          {Array.from({ length: props.majHours }).map((_, i) => {
+            const s = new Date(props.t13.getTime() + i * 3600000);
+            const e = new Date(s.getTime() + 3600000);
+            const x1 = PADL + i * hourW;
+            const x2 = PADL + (i + 1) * hourW;
+            const night = isFullNightHour(s, e);
+            const label = night ? "HNM" : labelMajDay;
+
             return (
-              <g key={`m-${i}`}>
-                {tick(x2, Y2, segEnd)}
-                {acrBetween(x1, x2, Y2, segStart, DAY_MAJ, "HNM")}
+              <g key={`bot-${i}`}>
+                {tick(x2, Y2, fmt(e), night)}
+                {segAcronym(x1, x2, Y2, label, night)}
               </g>
             );
           })}
