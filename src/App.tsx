@@ -456,46 +456,41 @@ export default function App() {
 } // <-- close App component here
 
 /* ============ Frise chronologique (acronymes sur la ligne) ============ */
-function FriseTimeline(props: { /* ... */ }) {
-   // Force des entiers non négatifs
-   const nTop = Math.max(0, Math.floor(props.nonMajhours));
-   const nBot = Math.max(0, Math.floor(props.majHours));
-
-      const hourW = 56;
-   const lineLenTop = Math.max(1, nTop) * hourW;
-   const lineLenBot = Math.max(1, nBot) * hourW;
-   // ...
-   {/* heures distribuées */}
-   {Array.from({ length: nTop }).map((_, i) => { /* ... */ })}
-   {/* heures majorées */}
-   {Array.from({ length: nBot }).map((_, i) => { /* ... */ })}
-}
+function FriseTimeline(props: {
   start: Date;         // PDS
   dmj: Date;           // fin DMJ
   t13: Date;           // début amplitude
-  end: Date;           // FDS (pas indispensable pour la frise)
-  nonMajHours: number; // HS/HSN (non majorées) à partir de DMJ
-  majHours: number;    // HSM/HDM/HNM à partir de t13 (amplitude)
-  dayType: DayType;    // pour les libellés (HSM ↔ HDM)
- {
-  const W = 520;        // largeur mini
-  const H = 170;        // hauteur totale
-  const PADL = 58;      // marge gauche
-  const PADR = 16;
-  const Y1 = 62;        // y de la ligne 1
-  const Y2 = 132;       // y de la ligne 2
-  const hourW = 56;     // distance entre deux heures
+  end: Date;           // FDS (pas indispensable)
+  nonMajHours: number; // HS/HSN/HSD (non majorées) à partir de DMJ
+  majHours: number;    // HSM/HSNM/HSDM à partir de t13 (amplitude)
+  dayType: DayType;    // pour les libellés (HSM ↔ HSDM | HS ↔ HSD)
+}) {
+  // Sécurité: entiers >= 0
+  const nTop = Math.max(0, Math.floor(props.nonMajHours));
+  const nBot = Math.max(0, Math.floor(props.majHours));
 
-  const labelMajDay = props.dayType === "RH" ? "HDM" : "HSM";
+  // Gabarit
+  const W = 520;
+  const H = 170;
+  const PADL = 58;
+  const PADR = 16;
+  const Y1 = 62;
+  const Y2 = 132;
+  const hourW = 56;
+
+  // Libellés selon type de jour
+  const topDayLabel = props.dayType === "RH" ? "HSD"  : "HS";   // non majorées de jour
+  const botDayLabel = props.dayType === "RH" ? "HSDM" : "HSM";  // majorées de jour
 
   const fmt = (d: Date) =>
     `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
-  // Une heure entière est « nuit » si [s,e] est entièrement dans [21:00,06:00) (en tenant le passage minuit).
+  // Une heure entière est « nuit » si [s,e] est entièrement dans [21:00,06:00)
   function isFullNightHour(s: Date, e: Date) {
     const spans: Array<{ sd: Date; ed: Date }> = [];
     const mid = new Date(s); mid.setHours(24, 0, 0, 0);
-    if (e <= mid) spans.push({ sd: s, ed: e }); else { spans.push({ sd: s, ed: mid }); spans.push({ sd: mid, ed: e }); }
+    if (e <= mid) spans.push({ sd: s, ed: e });
+    else { spans.push({ sd: s, ed: mid }); spans.push({ sd: mid, ed: e }); }
     for (const sp of spans) {
       const d0 = new Date(sp.sd); d0.setHours(0, 0, 0, 0);
       const h06 = new Date(d0); h06.setHours(6, 0, 0, 0);
@@ -507,12 +502,11 @@ function FriseTimeline(props: { /* ... */ }) {
     return true;
   }
 
-  // Dessine un trait vertical + heure en dessous
+  // Trait + heure (traits toujours gris foncé ; seul le texte passe en rouge la nuit)
   function tick(x: number, y: number, label: string, night = false) {
     return (
       <g>
-        <line x1={x} y1={y - 12} x2={x} y2={y + 12}
-              stroke={night ? "#dc2626" : "#111827"} strokeWidth="2" />
+        <line x1={x} y1={y - 12} x2={x} y2={y + 12} stroke="#111827" strokeWidth="2" />
         <text x={x} y={y + 24} textAnchor="middle" fontSize="12"
               fill={night ? "#dc2626" : "#111827"}>
           {label}
@@ -521,7 +515,7 @@ function FriseTimeline(props: { /* ... */ }) {
     );
   }
 
-  // Texte centré sur le segment (entre deux traits)
+  // Acronyme centré entre deux traits
   function segAcronym(x1: number, x2: number, y: number, text: string, night = false) {
     const cx = (x1 + x2) / 2;
     return (
@@ -532,17 +526,15 @@ function FriseTimeline(props: { /* ... */ }) {
     );
   }
 
-  // Longueurs de lignes (au moins 1 segment)
-  const lineLenTop = Math.max(1, props.nonMajHours) * hourW;
-  const lineLenBot = Math.max(1, props.majHours) * hourW;
-
+  // Longueurs de lignes (au moins un segment)
+  const lineLenTop = Math.max(1, nTop) * hourW;
+  const lineLenBot = Math.max(1, nBot) * hourW;
   const viewW = Math.max(W, PADL + PADR + Math.max(lineLenTop, lineLenBot));
-  const needLine2 = props.majHours > 0;
+  const needLine2 = nBot > 0;
 
   return (
     <svg width="100%" height={needLine2 ? H : H - 44}
          viewBox={`0 0 ${viewW} ${needLine2 ? H : H - 44}`}>
-
       {/* Titre */}
       <text x={viewW / 2} y={24} textAnchor="middle"
             fontSize="14" fontWeight={700} fill="#111827">
@@ -550,7 +542,6 @@ function FriseTimeline(props: { /* ... */ }) {
       </text>
 
       {/* ===== Ligne 1 : HS / HSN / HSD ===== */}
-      {/* libellés Pds / DMJ */}
       <text x={PADL - 38} y={Y1 - 22} fontSize="12" fill="#374151">Pds</text>
       <text x={PADL}       y={Y1 - 22} fontSize="12" fill="#374151" textAnchor="middle">DMJ</text>
 
@@ -558,62 +549,43 @@ function FriseTimeline(props: { /* ... */ }) {
       <line x1={PADL} y1={Y1} x2={PADL + lineLenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
       {/* pds → dmj (pointillés) */}
       <line x1={PADL - 40} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
-      {/* marqueurs Pds + DMJ */}
+      {/* repères */}
       {tick(PADL - 40, Y1, fmt(props.start))}
-      {tick(PADL, Y1, fmt(props.dmj))}
+      {tick(PADL,       Y1, fmt(props.dmj))}
 
-      {/* heures distribuées (segments + acronyme au milieu) */}
-      {Array.from({ length: props.nonMajHours }).map((_, i) => {
+      {/* segments non majorés */}
+      {Array.from({ length: nTop }).map((_, i) => {
         const s = new Date(props.dmj.getTime() + i * 3600000);
         const e = new Date(s.getTime() + 3600000);
         const x1 = PADL + i * hourW;
         const x2 = PADL + (i + 1) * hourW;
         const night = isFullNightHour(s, e);
-      // Acronyme non majoré
-         const labelNomMaj = props.dayType === "RH"
-            ? "HSD"
-            : night
-               ? "HSN"
-               : "HS";
+        const label = night ? "HSN" : topDayLabel;
         return (
           <g key={`top-${i}`}>
-            {/* trait de l’heure suivante + label heure (toujours noir/gris) */}
-            {tick(x2, Y1, fmt(e))}
-            {/* acronyme au milieu du segment */}
-            {segAcronym(x1, x2, Y1, labelNonMaj, night)}
+            {tick(x2, Y1, fmt(e), night)}
+            {segAcronym(x1, x2, Y1, label, night)}
           </g>
         );
       })}
 
-      {/* ===== Ligne 2 : HSM / HNM / HSDM ===== */}
+      {/* ===== Ligne 2 : HSM / HSNM / HSDM ===== */}
       {needLine2 && (
         <>
-          {/* libellé Amplitude */}
           <text x={PADL - 40} y={Y2 - 22} fontSize="12" fill="#374151">Amplitude</text>
-
-          {/* base */}
           <line x1={PADL} y1={Y2} x2={PADL + lineLenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
-          {/* repère amplitude (t13) */}
           {tick(PADL, Y2, fmt(props.t13))}
-
-          {/* heures majorées (segments + acronyme sur la ligne) */}
-          {Array.from({ length: props.majHours }).map((_, i) => {
+          {Array.from({ length: nBot }).map((_, i) => {
             const s = new Date(props.t13.getTime() + i * 3600000);
             const e = new Date(s.getTime() + 3600000);
             const x1 = PADL + i * hourW;
             const x2 = PADL + (i + 1) * hourW;
             const night = isFullNightHour(s, e);
-         // Acronyme majoré
-           const labelMaj = props.dayType === "RH"
-           ? "HSDM"
-              : night
-               ? "HSNM"
-               : "HSM";
-
+            const label = night ? "HSNM" : botDayLabel;
             return (
               <g key={`bot-${i}`}>
-                {tick(x2, Y2, fmt(e))}
-                {segAcronym(x1, x2, Y2, labelMaj, night)}
+                {tick(x2, Y2, fmt(e), night)}
+                {segAcronym(x1, x2, Y2, label, night)}
               </g>
             );
           })}
