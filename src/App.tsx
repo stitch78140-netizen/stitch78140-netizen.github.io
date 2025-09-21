@@ -557,7 +557,7 @@ function FriseTimeline(props: {
         const x2 = PADL + (i + 1) * hourW;
         const night = isFullNightHour(s, e);
       // Acronyme non majoré
-         const labelNomMaj = props.dayType ==="RH"
+         const labelNomMaj = props.dayType === "RH"
             ? "HSD"
             : night
                ? "HSN"
@@ -572,7 +572,7 @@ function FriseTimeline(props: {
         );
       })}
 
-      {/* ===== Ligne 2 : HSM/HDM / HNM ===== */}
+      {/* ===== Ligne 2 : HSM / HNM / HSDM ===== */}
       {needLine2 && (
         <>
           {/* libellé Amplitude */}
@@ -594,8 +594,8 @@ function FriseTimeline(props: {
            const labelMaj = props.dayType === "RH"
            ? "HSDM"
               : night
-              ? "HSNM
-              : "HSM";
+               ? "HSNM"
+               : "HSM";
 
             return (
               <g key={`bot-${i}`}>
