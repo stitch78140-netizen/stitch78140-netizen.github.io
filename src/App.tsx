@@ -388,7 +388,7 @@ export default function App() {
           return (
             <>
               {out.HSM > 0 && (<><div>{out.HSM} HS × {pct}</div><div /></>)}
-              {out.HSN > 0 && (<><div>{out.HSN} HSN × {pct}</div><div /></>)}
+              {out.HNM > 0 && (<><div>{out.HNM} HSN × {pct}</div><div /></>)}
             </>
           );
         })()}
