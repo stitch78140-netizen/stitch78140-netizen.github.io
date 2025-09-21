@@ -1,3 +1,8 @@
+/* ===========================================
+   CHECKPOINT: Frise OK — 2025-09-20
+   Base stable (UI + frise + acronymes)
+   =========================================== */
+
 // src/modules/civils.ts
 export type DayType = 'SO' | 'R' | 'RH';
 
