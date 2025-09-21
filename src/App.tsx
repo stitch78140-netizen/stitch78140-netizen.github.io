@@ -370,6 +370,7 @@ export default function App() {
           </div>
         </div>
       )}
+       
    {/* Ventilation / Répartition */}
 {out && (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -428,7 +429,6 @@ export default function App() {
       </div>
     </div>
   </div>
-)}
 )}
 
             {/* --- Frise explicative --- */}
