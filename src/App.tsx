@@ -1,3 +1,4 @@
+const VERSION = "stable-1";
 /* ===========================================
    CHECKPOINT: Frise OK — 2025-09-20
    Base stable (UI + frise + acronymes)
