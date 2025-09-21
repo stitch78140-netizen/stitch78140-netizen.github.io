@@ -425,11 +425,11 @@ function FriseTimeline(props: {
   dayType: DayType;    // pour les libellés (HSM ↔ HDM)
 }) {
   const W = 520;        // largeur mini
-  const H = 150;        // hauteur totale
+  const H = 170;        // hauteur totale
   const PADL = 58;      // marge gauche
   const PADR = 16;
   const Y1 = 62;        // y de la ligne 1
-  const Y2 = 116;       // y de la ligne 2
+  const Y2 = 132;       // y de la ligne 2
   const hourW = 56;     // distance entre deux heures
 
   const labelMajDay = props.dayType === "RH" ? "HDM" : "HSM";
