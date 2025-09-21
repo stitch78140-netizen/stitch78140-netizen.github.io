@@ -372,29 +372,80 @@ export default function App() {
       )}
 
       {/* Ventilation / Répartition */}
-      {out && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <div style={{ ...card, marginTop: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Ventilation des heures</div>
-            <div style={row3}>
-              <div>{nonMaj} {HS_label}</div><div />
-              {maj>0 && (<><div>1 HS × {factor*100}% soit</div><div>{maj} {HSM_label} ({dayType})</div></>)}
-            </div>
-          </div>
+{out && (
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+    {/* Ventilation des heures (pédagogie: base + facteur => crédit) */}
+    <div style={{ ...card, marginTop: 12 }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Ventilation des heures</div>
+      <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
+        {/* Non majorées */}
+        {out.HS > 0 && (<><div>{out.HS} HS</div><div /></>)}
+        {out.HSN > 0 && (<><div>{out.HSN} HSN</div><div /></>)}
 
-          <div style={{ ...card, marginTop: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Répartition des heures</div>
-            <div style={row3}>
-              <div>{nonMaj} {HS_label}</div><div />
-              {maj>0 && (<><div>{maj} {HSM_label}</div><div /></>)}
-            </div>
-            <div style={{ marginTop: 8, color: "#b91c1c", fontWeight: 600 }}>
-              {dayType === "R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
-              {dayType === "RH" && "Crédit de 1,5 RCJ ou 2 RCJ + 1 RL au titre du DP sur le RH"}
-            </div>
-          </div>
-        </div>
-      )}
+        {/* Heures à majorer (montrées comme "HS/HSN × % → HSM/HNM") */}
+        {(() => {
+          const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
+          const HSM_label = dayType === "RH" ? "HDM" : "HSM";
+          const fmt = (n:number) => (Number.isInteger(n) ? String(n) : String(n).replace(/\.0$/,""));
+          const dayMaj  = out.HSM; // segments jour au-delà de 13h
+          const niteMaj = out.HNM; // segments nuit au-delà de 13h
+
+          return (
+            <>
+              {dayMaj > 0 && (
+                <>
+                  <div>{dayMaj} HS × {factor*100}%</div>
+                  <div>{fmt(dayMaj*factor)} {HSM_label}</div>
+                </>
+              )}
+              {niteMaj > 0 && (
+                <>
+                  <div>{niteMaj} HSN × {factor*100}%</div>
+                  <div>{fmt(niteMaj*factor)} HNM</div>
+                </>
+              )}
+            </>
+          );
+        })()}
+      </div>
+    </div>
+
+    {/* Répartition des heures (résultat crédité) */}
+    <div style={{ ...card, marginTop: 12 }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Répartition des heures</div>
+      <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
+        {/* Non majorées rendues telles quelles */}
+        {out.HS  > 0 && (<><div>{out.HS} HS</div><div /></>)}
+        {out.HSN > 0 && (<><div>{out.HSN} HSN</div><div /></>)}
+
+        {/* Crédits majorés (après application du facteur) */}
+        {(() => {
+          const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
+          const HSM_label = dayType === "RH" ? "HDM" : "HSM";
+          const fmt = (n:number) => {
+            const s = (Math.round(n*2)/2).toString();
+            return s.endsWith(".0") ? s.slice(0,-2) : s;
+          };
+          const creditedHSM = out.HSM * factor;
+          const creditedHNM = out.HNM * factor;
+
+          return (
+            <>
+              {creditedHSM > 0 && (<><div>{fmt(creditedHSM)} {HSM_label}</div><div /></>)}
+              {creditedHNM > 0 && (<><div>{fmt(creditedHNM)} HNM</div><div /></>)}
+            </>
+          );
+        })()}
+      </div>
+
+      {/* DP crédits */}
+      <div style={{ marginTop: 8, color: "#b91c1c", fontWeight: 600 }}>
+        {dayType === "R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
+        {dayType === "RH" && "Crédit de 1,5 ou 2 RCJ + 1 RL au titre du DP sur le RH"}
+      </div>
+    </div>
+  </div>
+)}
 
             {/* --- Frise explicative --- */}
       {out && (
