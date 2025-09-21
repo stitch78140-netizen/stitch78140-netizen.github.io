@@ -1,3 +1,9 @@
+const VERSION = "stable-1";
+/* ===========================================
+   CHECKPOINT: Frise OK — 2025-09-20
+   Base stable (UI + frise + acronymes)
+   =========================================== */
+
 import React, { useMemo, useState, useEffect } from "react";
 import {
   compute,
@@ -6,20 +12,26 @@ import {
   dayTypeFromAccountingDate,
 } from "./modules/civils";
 
-/* ========= Helpers ========= */
+/* ============ Helpers ============ */
 const pad = (n: number) => String(n).padStart(2, "0");
-const addMinutes = (d: Date, m: number) => new Date(d.getTime() + m * 60000);
 
-function formatTypingHHMM(raw: string) {
+function addMinutes(d: Date, m: number) { return new Date(d.getTime() + m * 60000); }
+function asHM(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
+function asHMstrict(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
+
+/** Pendant la frappe : 0–4 chiffres ; ajoute ":" à partir de 3 chiffres. */
+function formatTypingHHMM(raw: string): string {
   const d = raw.replace(/[^\d]/g, "").slice(0, 4);
   if (d.length <= 2) return d;
   return d.slice(0, 2) + ":" + d.slice(2);
 }
-function finalizeHHMM(raw: string) {
+/** Au blur : finalise en HH:MM (padding) + bornage (0–23, 0–59). */
+function finalizeHHMM(raw: string): string {
   const d = raw.replace(/[^\d]/g, "");
-  if (!d) return "";
+  if (d.length === 0) return "";
   let h = 0, m = 0;
-  if (d.length <= 2) { h = Number(d); }
+  if (d.length === 1) { h = Number(d); m = 0; }
+  else if (d.length === 2) { h = Number(d); m = 0; }
   else if (d.length === 3) { h = Number(d.slice(0,2)); m = Number("0"+d.slice(2)); }
   else { h = Number(d.slice(0,2)); m = Number(d.slice(2,4)); }
   if (h > 23) h = 23;
@@ -30,45 +42,52 @@ function isValidHHMM(v: string) {
   const m = /^(\d{2}):(\d{2})$/.exec(v);
   if (!m) return false;
   const h = +m[1], mm = +m[2];
-  return h>=0 && h<=23 && mm>=0 && mm<=59;
-}
-const hm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-const asHM  = (min: number) => `${pad(Math.floor(min/60))}:${pad(min%60)}`;
-const asHMstrict = asHM;
-
-/* Night test = on classe l’heure par le **début** du créneau */
-function isNightSlotStart(d: Date) {
-  const h = d.getHours();
-  return h >= 21 || h < 6;
+  return h >= 0 && h <= 23 && mm >= 0 && mm <= 59;
 }
 
+/** +1h sous forme HH:MM ; si date vide, fallback sur la PDS. */
+function plus1hLabel(dateISO: string, hhmm: string, fallbackDateISO?: string) {
+  const useDate = dateISO || fallbackDateISO || "";
+  if (!useDate || !isValidHHMM(hhmm)) return "";
+  const [h, m] = hhmm.split(":").map(Number);
+  const d = new Date(`${useDate}T${pad(h)}:${pad(m)}`);
+  const e = addMinutes(d, 60);
+  return `${pad(e.getHours())}:${pad(e.getMinutes())}`;
+}
+
+/** DMJ/Amplitude : HH:MM en gras si même jour que PDS/FDS ; sinon JJ/MM/AAAA HH:MM (heure en gras). */
 function fmtSmart(d: Date, refStart?: Date, refEnd?: Date) {
-  const s = hm(d);
-  const same = (refStart && d.toDateString() === refStart.toDateString())
-            || (refEnd && d.toDateString() === refEnd.toDateString());
-  return same ? <strong>{s}</strong>
-              : <>{pad(d.getDate())}/{pad(d.getMonth()+1)}/{d.getFullYear()} <strong>{s}</strong></>;
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const sd = refStart ? refStart.toDateString() : "";
+  const ed = refEnd ? refEnd.toDateString() : "";
+  const same = d.toDateString() === sd || d.toDateString() === ed;
+  if (same) return <strong>{hm}</strong>;
+  return <>{pad(d.getDate())}/{pad(d.getMonth()+1)}/{d.getFullYear()} <strong>{hm}</strong></>;
 }
 
-/* ========= App ========= */
+/* ============ App ============ */
 export default function App() {
-  const [startDate, setStartDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endDate,   setEndDate]   = useState("");
-  const [endTime,   setEndTime]   = useState("");
+  /* Prise / Fin : date + heure séparées */
+  const [startDate, setStartDate] = useState<string>("");
+  const [startTime, setStartTime] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [endTime, setEndTime] = useState<string>("");
 
-  const [breakDate, setBreakDate] = useState("");
-  const [breakStartTime, setBreakStartTime] = useState("");
-  const [breakEndTime,   setBreakEndTime]   = useState("");
+  /* Coupure */
+  const [breakDate, setBreakDate] = useState<string>("");
+  const [breakStartTime, setBreakStartTime] = useState<string>("");
+  const [breakEndTime, setBreakEndTime] = useState<string>("");
 
-  const [noonDate, setNoonDate] = useState("");
-  const [noonStart, setNoonStart] = useState("");
-  const [eveDate,  setEveDate]  = useState("");
-  const [eveStart, setEveStart] = useState("");
+  /* Repas (début seulement, fin = +1h) */
+  const [noonDate, setNoonDate] = useState<string>("");
+  const [noonStart, setNoonStart] = useState<string>("");
+  const [eveDate, setEveDate] = useState<string>("");
+  const [eveStart, setEveStart] = useState<string>("");
 
+  /* Type de jour (TSr) */
   const [dayType, setDayType] = useState<DayType>("SO");
 
-  /* Dates */
+  /* Constructions Date (fallback sur startDate si date locale absente) */
   const startDT = useMemo(() => {
     if (!startDate || !isValidHHMM(startTime)) return null;
     const [h,m] = startTime.split(":").map(Number);
@@ -109,7 +128,7 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [eveDate, eveStart, startDate]);
 
-  /* TSr auto */
+  /* TSr (journée comptable) */
   useEffect(() => {
     if (!startDT || !endDT) return;
     const meals: Array<{start:Date; end:Date}> = [];
@@ -128,53 +147,54 @@ export default function App() {
       start: startDT,
       end: endDT,
       theBreak: breakStartDT && breakEndDT ? { start: breakStartDT, end: breakEndDT } : undefined,
-      mealNoon:    noonStartDT ? { start: noonStartDT, end: addMinutes(noonStartDT,60) } : undefined,
-      mealEvening:   eveStartDT ? { start: eveStartDT,  end: addMinutes(eveStartDT, 60) } : undefined,
+      mealNoon:   noonStartDT ? { start: noonStartDT, end: addMinutes(noonStartDT,60) } : undefined,
+      mealEvening: eveStartDT ? { start: eveStartDT,  end: addMinutes(eveStartDT, 60) } : undefined,
       dayType,
     });
   }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, eveStartDT, dayType]);
 
-  /* Découpage heures (nonMaj / maj) + HS/HSN par **début** de créneau */
-  const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
+  /* Libellés & répartition */
+  const HS_label  = dayType === "RH" ? "HSD" : "HS";
   const HSM_label = dayType === "RH" ? "HDM" : "HSM";
+  const factor    = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
 
-  const buckets = useMemo(() => {
-    if (!out) return null;
+  const nonMaj = out ? Math.min(out.A_hours, out.B_total_h) : 0;
+  const maj    = out ? Math.max(0, out.B_total_h - nonMaj) : 0;
 
-    const nonMajCount = Math.min(out.A_hours, out.B_total_h);      // heures dans A
-    const majCount    = Math.max(0, out.B_total_h - nonMajCount);  // reste à majorer
+  const cmp = out
+    ? (out.Amin_min % 60) > (out.Bmin_min % 60) ? ">" :
+      (out.Amin_min % 60) < (out.Bmin_min % 60) ? "<" : "="
+    : "=";
 
-    let nonMajHS = 0, nonMajHSN = 0;
-    for (let i=0;i<nonMajCount;i++){
-      const s = new Date(out.dmjEnd.getTime() + i*3600000);
-      if (isNightSlotStart(s)) nonMajHSN++; else nonMajHS++;
-    }
+  /* ============ Styles mobile-first ============ */
+  const box: React.CSSProperties  = { margin: "16px auto", maxWidth: 900, padding: 16, fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
+  const card: React.CSSProperties = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 };
+  const row3: React.CSSProperties = { display: "grid", gridTemplateColumns: "auto 1fr", gap: 6 };
+  const btn: React.CSSProperties  = { padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" };
+  const labelCol: React.CSSProperties = { fontWeight: 500, marginBottom: 6 };
 
-    let majHS = 0, majHSN = 0;
-    for (let i=0;i<majCount;i++){
-      const s = new Date(out.t13.getTime() + i*3600000);
-      if (isNightSlotStart(s)) majHSN++; else majHS++;
-    }
+  // lignes du formulaire (toujours sur 2 lignes : date puis heures)
+  const dateRow: React.CSSProperties = { display: "block", width: "100%", marginBottom: 6 };
+  const timesRow2: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "minmax(6.2em,1fr) minmax(2em,auto) minmax(6.2em,1fr)", // HH:MM – HH:MM
+    gap: 8,
+    alignItems: "center",
+    width: "100%",
+  };
+  const timesRow1pair: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "minmax(6.2em,1fr) minmax(6.2em,1fr)", // HH:MM  +1h
+    gap: 8,
+    alignItems: "center",
+    width: "100%",
+  };
 
-    return { nonMajHS, nonMajHSN, majHS, majHSN, nonMajCount, majCount };
-  }, [out]);
+  const inputBase: React.CSSProperties   = { width: "100%", minWidth: 0, boxSizing: "border-box", fontSize: 16, padding: "8px 10px" };
+  const sep: React.CSSProperties         = { textAlign: "center", opacity: 0.6 };
 
-  if (!out) {
-    /* UI vide (form en haut seulement) */
-  }
-
-  /* ===== Styles ===== */
-  const box:  React.CSSProperties = { margin:"16px auto", maxWidth:900, padding:16, fontFamily:"system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
-  const card: React.CSSProperties = { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:12 };
-  const btn:  React.CSSProperties = { padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:8, background:"#f8fafc" };
-  const labelCol: React.CSSProperties = { fontWeight:500, marginBottom:6 };
-  const dateRow: React.CSSProperties  = { display:"block", width:"100%", marginBottom:6 };
-  const timesRow2: React.CSSProperties = { display:"grid", gridTemplateColumns:"minmax(6.2em,1fr) minmax(2em,auto) minmax(6.2em,1fr)", gap:8, alignItems:"center", width:"100%" };
-  const timesRow1: React.CSSProperties = { display:"grid", gridTemplateColumns:"minmax(6.2em,1fr) minmax(6.2em,1fr)", gap:8, alignItems:"center", width:"100%" };
-  const inputBase: React.CSSProperties = { width:"100%", minWidth:0, boxSizing:"border-box", fontSize:16, padding:"8px 10px", textAlign:"center" };
-  const sep: React.CSSProperties = { textAlign:"center", opacity:0.6 };
-
-  function clearAll(){
+  /* Effacer tout */
+  function clearAll() {
     setStartDate(""); setStartTime("");
     setEndDate(""); setEndTime("");
     setBreakDate(""); setBreakStartTime(""); setBreakEndTime("");
@@ -189,252 +209,393 @@ export default function App() {
         <button style={btn} onClick={clearAll}>Tout effacer</button>
       </div>
 
-      {/* Formulaire */}
-      <div style={{...card, display:"grid", gap:12}}>
+      {/* --- Formulaire (mobile-first) --- */}
+      <div style={{ ...card, display: "grid", gap: 12 }}>
+        {/* Prise de service */}
         <div>
           <div style={labelCol}>Prise de service</div>
-          <div style={dateRow}><input style={inputBase} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} /></div>
-          <div style={timesRow1}>
-            <input style={inputBase} inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={startTime} onChange={e=>setStartTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>setStartTime(finalizeHHMM(e.target.value))} />
-            <div/>
+          <div style={dateRow}>
+            <input style={inputBase} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+          </div>
+          <div style={timesRow1pair}>
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={startTime}
+              onChange={e=>setStartTime(formatTypingHHMM(e.target.value))}
+              onBlur={e=>setStartTime(finalizeHHMM(e.target.value))}
+            />
+            <div />
           </div>
         </div>
 
+        {/* Fin de service */}
         <div>
           <div style={labelCol}>Fin de service</div>
-          <div style={dateRow}><input style={inputBase} type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} /></div>
-          <div style={timesRow1}>
-            <input style={inputBase} inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={endTime} onChange={e=>setEndTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>setEndTime(finalizeHHMM(e.target.value))} />
-            <div/>
+          <div style={dateRow}>
+            <input style={inputBase} type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} />
+          </div>
+          <div style={timesRow1pair}>
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={endTime}
+              onChange={e=>setEndTime(formatTypingHHMM(e.target.value))}
+              onBlur={e=>setEndTime(finalizeHHMM(e.target.value))}
+            />
+            <div />
           </div>
         </div>
 
+        {/* Coupure */}
         <div>
-          <div style={{...labelCol, display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span>Coupure</span>
             <button style={btn} onClick={()=>{ setBreakDate(""); setBreakStartTime(""); setBreakEndTime(""); }}>Effacer</button>
           </div>
-          <div style={dateRow}><input style={inputBase} type="date" value={breakDate} onChange={e=>setBreakDate(e.target.value)} /></div>
+          <div style={dateRow}>
+            <input style={inputBase} type="date" value={breakDate} onChange={e=>setBreakDate(e.target.value)} />
+          </div>
           <div style={timesRow2}>
-            <input style={inputBase} inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={breakStartTime} onChange={e=>setBreakStartTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{ const v = finalizeHHMM(e.target.value); setBreakStartTime(v); if(!breakDate && startDate && v) setBreakDate(startDate); }} />
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={breakStartTime}
+              onChange={e=>setBreakStartTime(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setBreakStartTime(v);
+                if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
+              }}
+            />
             <div style={sep}>–</div>
-            <input style={inputBase} inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={breakEndTime} onChange={e=>setBreakEndTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{ const v = finalizeHHMM(e.target.value); setBreakEndTime(v); if(!breakDate && startDate && v) setBreakDate(startDate); }} />
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={breakEndTime}
+              onChange={e=>setBreakEndTime(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setBreakEndTime(v);
+                if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
+              }}
+            />
           </div>
         </div>
 
+        {/* Repas méridien */}
         <div>
-          <div style={{...labelCol, display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span>Repas méridien</span>
             <button style={btn} onClick={()=>{ setNoonDate(""); setNoonStart(""); }}>Effacer</button>
           </div>
-          <div style={dateRow}><input style={inputBase} type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} /></div>
-          <div style={timesRow1}>
-            <input style={inputBase} inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={noonStart} onChange={e=>setNoonStart(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{ const v = finalizeHHMM(e.target.value); setNoonStart(v); if(!noonDate && startDate && v) setNoonDate(startDate); }} />
-            <input style={inputBase} value={noonStart && (()=>{
-              if(!noonDate && !startDate) return "";
-              const dISO = noonDate || startDate!;
-              const [h,m] = noonStart.split(":").map(Number);
-              return hm(addMinutes(new Date(`${dISO}T${pad(h)}:${pad(m)}`),60));
-            })()} readOnly />
+          <div style={dateRow}>
+            <input style={inputBase} type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} />
+          </div>
+          <div style={timesRow1pair}>
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={noonStart}
+              onChange={e=>setNoonStart(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setNoonStart(v);
+                if (!noonDate && startDate && v) setNoonDate(startDate); // auto-date
+              }}
+            />
+            <input style={inputBase} value={plus1hLabel(noonDate, noonStart, startDate)} readOnly />
           </div>
         </div>
 
+        {/* Repas vespéral */}
         <div>
-          <div style={{...labelCol, display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span>Repas vespéral</span>
             <button style={btn} onClick={()=>{ setEveDate(""); setEveStart(""); }}>Effacer</button>
           </div>
-          <div style={dateRow}><input style={inputBase} type="date" value={eveDate} onChange={e=>setEveDate(e.target.value)} /></div>
-          <div style={timesRow1}>
-            <input style={inputBase} inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={eveStart} onChange={e=>setEveStart(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{ const v = finalizeHHMM(e.target.value); setEveStart(v); if(!eveDate && startDate && v) setEveDate(startDate); }} />
-            <input style={inputBase} value={eveStart && (()=>{
-              if(!eveDate && !startDate) return "";
-              const dISO = eveDate || startDate!;
-              const [h,m] = eveStart.split(":").map(Number);
-              return hm(addMinutes(new Date(`${dISO}T${pad(h)}:${pad(m)}`),60));
-            })()} readOnly />
+          <div style={dateRow}>
+            <input style={inputBase} type="date" value={eveDate} onChange={e=>setEveDate(e.target.value)} />
+          </div>
+          <div style={timesRow1pair}>
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={eveStart}
+              onChange={e=>setEveStart(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setEveStart(v);
+                if (!eveDate && startDate && v) setEveDate(startDate); // auto-date
+              }}
+            />
+            <input style={inputBase} value={plus1hLabel(eveDate, eveStart, startDate)} readOnly />
           </div>
         </div>
       </div>
 
       {/* TSr */}
       {out && (
-        <div style={{...card, marginTop:12}}>
-          Tsr : <strong>{dayType}</strong> {dayType==="SO"?"(Lun–Ven)":dayType==="R"?"(Samedi)":"(Dimanche)"}
+        <div style={{ ...card, marginTop: 12 }}>
+          Tsr : <strong>{dayType}</strong> {dayType === "SO" ? "(Lun–Ven)" : dayType === "R" ? "(Samedi)" : "(Dimanche)"}
         </div>
       )}
 
       {/* Repères */}
       {out && (
-        <div style={{...card, marginTop:12}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div>DMJ atteinte à</div><div>{fmtSmart(out.dmjEnd, startDT!, endDT!)}</div>
-            <div>Amplitude atteinte à</div><div>{fmtSmart(out.t13, startDT!, endDT!)}</div>
+        <div style={{ ...card, marginTop: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>DMJ atteinte à</div>
+            <div>{fmtSmart(out.dmjEnd, startDT!, endDT!)}</div>
+            <div>Amplitude atteinte à</div>
+            <div>{fmtSmart(out.t13, startDT!, endDT!)}</div>
             <div>Dépassement total</div>
-            <div>{asHM(out.Bmin_min)} → <strong style={{color:"#b91c1c"}}>{asHMstrict(out.B_total_h*60)}</strong></div>
+            <div>
+              {asHM(out.Bmin_min)} → <strong style={{color:"#b91c1c"}}>{asHMstrict(out.B_total_h*60)}</strong>
+            </div>
           </div>
         </div>
       )}
 
       {/* Amin / Bmin */}
       {out && (
-        <div style={{...card, marginTop:12}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div>Amin</div><div>{Math.floor(out.Amin_min/60)} h <strong>{pad(out.Amin_min%60)}</strong></div>
-            <div>Bmin</div><div>{Math.floor(out.Bmin_min/60)} h <strong>{pad(out.Bmin_min%60)}</strong></div>
+        <div style={{ ...card, marginTop: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>Amin</div>
+            <div>{Math.floor(out.Amin_min/60)} h <strong>{pad(out.Amin_min%60)}</strong></div>
+            <div>Bmin</div>
+            <div>{Math.floor(out.Bmin_min/60)} h <strong>{pad(out.Bmin_min%60)}</strong></div>
           </div>
-          <div style={{marginTop:8, textAlign:"center", fontSize:18}}>
-            Amin { (out.Amin_min%60)>(out.Bmin_min%60) ? ">" : (out.Amin_min%60)<(out.Bmin_min%60) ? "<" : "=" } Bmin
-          </div>
-        </div>
-      )}
-
-      {/* VENTILATION */}
-      {out && buckets && (
-        <div style={{...card, marginTop:12}}>
-          <div style={{fontWeight:600, marginBottom:8}}>Ventilation des heures</div>
-          <div style={{display:"grid", gridTemplateColumns:"auto 1fr", gap:6}}>
-            {/* HS non majorées */}
-            {buckets.nonMajHS > 0 && (<><div>{buckets.nonMajHS} HS</div><div/></>)}
-
-            {/* HSN (regroupées) */}
-            { (buckets.nonMajHSN + buckets.majHSN) > 0 && (
-              <>
-                <div>{(buckets.nonMajHSN + buckets.majHSN)} HSN × {factor*100}%</div>
-                <div/>
-              </>
-            )}
+          <div style={{ marginTop: 8, textAlign: "center", fontSize: 18 }}>
+            Amin {cmp} Bmin
           </div>
         </div>
       )}
+       
+   {/* Ventilation / Répartition */}
+{out && (
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+    {/* VENTILATION */}
+    <div style={{ ...card, marginTop: 12 }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Ventilation des heures</div>
+      <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
+        {/* HS non majorées (base) */}
+        {out.HS  > 0 && (<><div>{out.HS} {dayType === "RH" ? "HSD" : "HS"}</div><div /></>)}
 
-      {/* RÉPARTITION (créditée) */}
-      {out && buckets && (
-        <div style={{...card, marginTop:12}}>
-          <div style={{fontWeight:600, marginBottom:8}}>Répartition des heures</div>
-          <div style={{display:"grid", gridTemplateColumns:"auto 1fr", gap:6}}>
-            {/* HS (non maj) */}
-            {buckets.nonMajHS > 0 && (<><div>{buckets.nonMajHS} HS</div><div/></>)}
+        {/* Lignes "à majorer" (une seule ligne par type) */}
+        {(() => {
+          const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
+          const pct = `${factor*100}%`;
+          return (
+            <>
+              {out.HSM > 0 && (<><div>{out.HSM} HS × {pct}</div><div /></>)}
+              {out.HNM > 0 && (<><div>{out.HNM} HSN × {pct}</div><div /></>)}
+            </>
+          );
+        })()}
+      </div>
+    </div>
 
-            {/* HSM et HNM crédités */}
-            { buckets.majHS > 0 && (
-              <>
-                <div>{(buckets.majHS * factor).toString().replace(/\.0$/,"")} {HSM_label}</div>
-                <div/>
-              </>
-            )}
-            { (buckets.nonMajHSN + buckets.majHSN) > 0 && (
-              <>
-                <div>{(((buckets.nonMajHSN + buckets.majHSN) * factor)).toString().replace(/\.0$/,"")} HNM</div>
-                <div/>
-              </>
-            )}
-          </div>
+    {/* RÉPARTITION (créditée) */}
+    <div style={{ ...card, marginTop: 12 }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Répartition des heures</div>
+      <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
+        {/* Non majorées rendues telles quelles */}
+        {out.HS  > 0 && (<><div>{out.HS} {dayType === "RH" ? "HSD" : "HS"}</div><div /></>)}
 
-          <div style={{marginTop:8, color:"#b91c1c", fontWeight:600}}>
-            {dayType==="R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
-            {dayType==="RH" && "Crédit de 1,5 RCJ ou 2 RCJ + 1 RL au titre du DP sur le RH"}
-          </div>
-        </div>
-      )}
+        {/* Crédits majorés (après application du facteur) */}
+        {(() => {
+          const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
+          const HSM_label = dayType === "RH" ? "HDM" : "HSM";
+          const fmt = (n:number) => {
+            const s = (Math.round(n*2)/2).toString();
+            return s.endsWith(".0") ? s.slice(0,-2) : s;
+          };
+          const creditedHSM = out.HSM * factor;
+          const creditedHNM = out.HNM * factor;
 
-      {/* FRISE */}
-      {out && startDT && endDT && buckets && (
-        <div style={{...card, marginTop:12}}>
+          return (
+            <>
+              {creditedHSM > 0 && (<><div>{fmt(creditedHSM)} {HSM_label}</div><div /></>)}
+              {creditedHNM > 0 && (<><div>{fmt(creditedHNM)} HNM</div><div /></>)}
+            </>
+          );
+        })()}
+      </div>
+
+      {/* DP crédits */}
+      <div style={{ marginTop: 8, color: "#b91c1c", fontWeight: 600 }}>
+        {dayType === "R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
+        {dayType === "RH" && "Crédit de 1,5 RCJ ou 2 RCJ + 1 RL au titre du DP sur le RH"}
+      </div>
+    </div>
+  </div>
+)}
+
+            {/* --- Frise explicative --- */}
+      {out && (
+        <div style={{ ...card, marginTop: 12 }}>
           <FriseTimeline
-            start={startDT}
+            start={startDT!}
             dmj={out.dmjEnd}
             t13={out.t13}
-            nonMajHours={buckets.nonMajCount}
-            majHours={buckets.majCount}
+            end={endDT!}
+            nonMajHours={nonMaj}
+            majHours={maj}
+            dayType={dayType}
           />
         </div>
       )}
 
-      <div style={{opacity:0.6, fontSize:12, textAlign:"center", marginTop:16}}>© Stitch08</div>
+      {/* footer */}
+      <div style={{ opacity:0.6, fontSize:12, textAlign:"center", marginTop:16 }}>
+        © Stitch08
+      </div>
     </div>
   );
-}
+} // <-- close App component here
 
-/* ========= Frise chronologique ========= */
+/* ============ Frise chronologique (acronymes sur la ligne) ============ */
 function FriseTimeline(props: {
-  start: Date; dmj: Date; t13: Date;
-  nonMajHours: number; majHours: number;
+  start: Date;         // PDS
+  dmj: Date;           // fin DMJ
+  t13: Date;           // début amplitude
+  end: Date;           // FDS (pas indispensable pour la frise)
+  nonMajHours: number; // HS/HSN (non majorées) à partir de DMJ
+  majHours: number;    // HSM/HDM/HNM à partir de t13 (amplitude)
+  dayType: DayType;    // pour les libellés (HSM ↔ HDM)
 }) {
-  const W = 560;                  // largeur mini
-  const PADL = 48, PADR = 16;
-  const Y1 = 48, Y2 = 112;        // lignes
-  const hourW = 64;
+  const W = 520;        // largeur mini
+  const H = 170;        // hauteur totale
+  const PADL = 58;      // marge gauche
+  const PADR = 16;
+  const Y1 = 62;        // y de la ligne 1
+  const Y2 = 132;       // y de la ligne 2
+  const hourW = 56;     // distance entre deux heures
 
+  const labelMajDay = props.dayType === "RH" ? "HDM" : "HSM";
+
+  const fmt = (d: Date) =>
+    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+  // Une heure entière est « nuit » si [s,e] est entièrement dans [21:00,06:00) (en tenant le passage minuit).
+  function isFullNightHour(s: Date, e: Date) {
+    const spans: Array<{ sd: Date; ed: Date }> = [];
+    const mid = new Date(s); mid.setHours(24, 0, 0, 0);
+    if (e <= mid) spans.push({ sd: s, ed: e }); else { spans.push({ sd: s, ed: mid }); spans.push({ sd: mid, ed: e }); }
+    for (const sp of spans) {
+      const d0 = new Date(sp.sd); d0.setHours(0, 0, 0, 0);
+      const h06 = new Date(d0); h06.setHours(6, 0, 0, 0);
+      const h21 = new Date(d0); h21.setHours(21, 0, 0, 0);
+      const interStart = new Date(Math.max(sp.sd.getTime(), h06.getTime()));
+      const interEnd   = new Date(Math.min(sp.ed.getTime(), h21.getTime()));
+      if (interEnd > interStart) return false; // il y a du jour
+    }
+    return true;
+  }
+
+  // Dessine un trait vertical + heure en dessous
+  function tick(x: number, y: number, label: string, night = false) {
+    return (
+      <g>
+        <line x1={x} y1={y - 12} x2={x} y2={y + 12}
+              stroke={night ? "#dc2626" : "#111827"} strokeWidth="2" />
+        <text x={x} y={y + 24} textAnchor="middle" fontSize="12"
+              fill={night ? "#dc2626" : "#111827"}>
+          {label}
+        </text>
+      </g>
+    );
+  }
+
+  // Texte centré sur le segment (entre deux traits)
+  function segAcronym(x1: number, x2: number, y: number, text: string, night = false) {
+    const cx = (x1 + x2) / 2;
+    return (
+      <text x={cx} y={y - 6} textAnchor="middle" fontSize="12"
+            fill={night ? "#dc2626" : "#111827"} fontWeight={600}>
+        {text}
+      </text>
+    );
+  }
+
+  // Longueurs de lignes (au moins 1 segment)
   const lineLenTop = Math.max(1, props.nonMajHours) * hourW;
   const lineLenBot = Math.max(1, props.majHours) * hourW;
-  const svgW = Math.max(W, PADL + PADR + Math.max(lineLenTop, lineLenBot));
-  const svgH = 150;
 
-  const tick = (x:number, y:number, label:string, red=false) => (
-    <g>
-      <line x1={x} y1={y-14} x2={x} y2={y+14} stroke={red?"#dc2626":"#111827"} strokeWidth={2}/>
-      <text x={x} y={y+26} textAnchor="middle" fontSize="12" fill={red?"#dc2626":"#111827"}>{label}</text>
-    </g>
-  );
+  const viewW = Math.max(W, PADL + PADR + Math.max(lineLenTop, lineLenBot));
+  const needLine2 = props.majHours > 0;
 
   return (
-    <svg width="100%" height={svgH} viewBox={`0 0 ${svgW} ${svgH}`}>
-      <text x={svgW/2} y={22} textAnchor="middle" fontWeight={700} fill="#111827">RÉPARTITION DES HEURES</text>
+    <svg width="100%" height={needLine2 ? H : H - 44}
+         viewBox={`0 0 ${viewW} ${needLine2 ? H : H - 44}`}>
 
-      {/* Ligne 1 : HS / HSN depuis DMJ */}
-      <text x={PADL-36} y={Y1-22} fontSize="12" fill="#6b7280">Pds</text>
-      <line x1={PADL-36} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4"/>
-      <text x={PADL-8} y={Y1-22} fontSize="12" fill="#6b7280">DMJ</text>
-      <line x1={PADL} y1={Y1} x2={PADL+lineLenTop} y2={Y1} stroke="#111827" strokeWidth={2}/>
-      {/* repères */}
-      {tick(PADL-36, Y1, "", false)}
-      {tick(PADL,     Y1, hm(props.dmj), isNightSlotStart(props.dmj))}
-      {/* heures nonMaj */}
-      {Array.from({length: props.nonMajHours}).map((_,i)=>{
-        const s = new Date(props.dmj.getTime() + i*3600000);
-        const x = PADL + (i+1)*hourW;
-        const night = isNightSlotStart(s);
+      {/* Titre */}
+      <text x={viewW / 2} y={24} textAnchor="middle"
+            fontSize="14" fontWeight={700} fill="#111827">
+        RÉPARTITION DES HEURES
+      </text>
+
+      {/* ===== Ligne 1 : HS / HSN ===== */}
+      {/* libellés Pds / DMJ */}
+      <text x={PADL - 38} y={Y1 - 22} fontSize="12" fill="#374151">Pds</text>
+      <text x={PADL}       y={Y1 - 22} fontSize="12" fill="#374151" textAnchor="middle">DMJ</text>
+
+      {/* base */}
+      <line x1={PADL} y1={Y1} x2={PADL + lineLenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
+      {/* pds → dmj (pointillés) */}
+      <line x1={PADL - 40} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
+      {/* marqueurs Pds + DMJ */}
+      {tick(PADL - 40, Y1, fmt(props.start))}
+      {tick(PADL, Y1, fmt(props.dmj))}
+
+      {/* heures distribuées (segments + acronyme au milieu) */}
+      {Array.from({ length: props.nonMajHours }).map((_, i) => {
+        const s = new Date(props.dmj.getTime() + i * 3600000);
+        const e = new Date(s.getTime() + 3600000);
+        const x1 = PADL + i * hourW;
+        const x2 = PADL + (i + 1) * hourW;
+        const night = isFullNightHour(s, e);
+
         return (
-          <g key={`n-${i}`}>
-            {tick(x, Y1, hm(addMinutes(props.dmj,(i+1)*60)), night)}
-            <text x={x-hourW/2} y={Y1-6} textAnchor="middle" fontSize="12" fill={night?"#dc2626":"#111827"}>
-              {night?"HSN":"HS"}
-            </text>
+          <g key={`top-${i}`}>
+            {/* trait de l’heure suivante + label heure */}
+            {tick(x2, Y1, fmt(e), night)}
+            {/* acronyme au milieu du segment */}
+            {segAcronym(x1, x2, Y1, night ? "HSN" : "HS", night)}
           </g>
         );
       })}
-      <text x={PADL-36} y={Y1+32} fontSize="12" fill="#111827">{hm(props.start)}</text>
 
-      {/* Ligne 2 : HSM / HNM depuis amplitude */}
-      <text x={PADL-26} y={Y2-22} fontSize="12" fill="#6b7280">Amplitude</text>
-      <line x1={PADL} y1={Y2} x2={PADL+lineLenBot} y2={Y2} stroke="#111827" strokeWidth={2}/>
-      {tick(PADL, Y2, hm(props.t13), isNightSlotStart(props.t13))}
-      {Array.from({length: props.majHours}).map((_,i)=>{
-        const s = new Date(props.t13.getTime() + i*3600000);
-        const x = PADL + (i+1)*hourW;
-        const night = isNightSlotStart(s);
-        return (
-          <g key={`m-${i}`}>
-            {tick(x, Y2, hm(addMinutes(props.t13,(i+1)*60)), night)}
-            <text x={x-hourW/2} y={Y2-6} textAnchor="middle" fontSize="12" fill={night?"#dc2626":"#111827"}>
-              {night?"HNM":"HSM"}
-            </text>
-          </g>
-        );
-      })}
+      {/* ===== Ligne 2 : HSM/HDM / HNM ===== */}
+      {needLine2 && (
+        <>
+          {/* libellé Amplitude */}
+          <text x={PADL - 40} y={Y2 - 22} fontSize="12" fill="#374151">Amplitude</text>
+
+          {/* base */}
+          <line x1={PADL} y1={Y2} x2={PADL + lineLenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
+          {/* repère amplitude (t13) */}
+          {tick(PADL, Y2, fmt(props.t13))}
+
+          {/* heures majorées (segments + acronyme sur la ligne) */}
+          {Array.from({ length: props.majHours }).map((_, i) => {
+            const s = new Date(props.t13.getTime() + i * 3600000);
+            const e = new Date(s.getTime() + 3600000);
+            const x1 = PADL + i * hourW;
+            const x2 = PADL + (i + 1) * hourW;
+            const night = isFullNightHour(s, e);
+            const label = night ? "HNM" : labelMajDay;
+
+            return (
+              <g key={`bot-${i}`}>
+                {tick(x2, Y2, fmt(e), night)}
+                {segAcronym(x1, x2, Y2, label, night)}
+              </g>
+            );
+          })}
+        </>
+      )}
     </svg>
   );
 }
