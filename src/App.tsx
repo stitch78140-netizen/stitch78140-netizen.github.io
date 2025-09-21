@@ -536,7 +536,7 @@ function FriseTimeline(props: {
         RÉPARTITION DES HEURES
       </text>
 
-      {/* ===== Ligne 1 : HS / HSN ===== */}
+      {/* ===== Ligne 1 : HS / HSN / HSD ===== */}
       {/* libellés Pds / DMJ */}
       <text x={PADL - 38} y={Y1 - 22} fontSize="12" fill="#374151">Pds</text>
       <text x={PADL}       y={Y1 - 22} fontSize="12" fill="#374151" textAnchor="middle">DMJ</text>
@@ -556,13 +556,18 @@ function FriseTimeline(props: {
         const x1 = PADL + i * hourW;
         const x2 = PADL + (i + 1) * hourW;
         const night = isFullNightHour(s, e);
-
+      // Acronyme non majoré
+         const labelNomMaj = props.dayType ==="RH"
+            ? "HSD"
+            : night
+               ? "HSN"
+               : "HS";
         return (
           <g key={`top-${i}`}>
-            {/* trait de l’heure suivante + label heure */}
-            {tick(x2, Y1, fmt(e), night)}
+            {/* trait de l’heure suivante + label heure (toujours noir/gris) */}
+            {tick(x2, Y1, fmt(e))}
             {/* acronyme au milieu du segment */}
-            {segAcronym(x1, x2, Y1, night ? "HSN" : "HS", night)}
+            {segAcronym(x1, x2, Y1, labelNonMaj, night)}
           </g>
         );
       })}
@@ -585,12 +590,17 @@ function FriseTimeline(props: {
             const x1 = PADL + i * hourW;
             const x2 = PADL + (i + 1) * hourW;
             const night = isFullNightHour(s, e);
-            const label = night ? "HNM" : labelMajDay;
+         // Acronyme majoré
+           const labelMaj = props.dayType === "RH"
+           ? "HSDM"
+              : night
+              ? "HSNM
+              : "HSM";
 
             return (
               <g key={`bot-${i}`}>
-                {tick(x2, Y2, fmt(e), night)}
-                {segAcronym(x1, x2, Y2, label, night)}
+                {tick(x2, Y2, fmt(e))}
+                {segAcronym(x1, x2, Y2, labelMaj, night)}
               </g>
             );
           })}
