@@ -1,3 +1,8 @@
+/* ===========================================
+   CHECKPOINT: Frise OK — 2025-09-20
+   Base stable (UI + frise + acronymes)
+   =========================================== */
+
 import React, { useMemo, useState, useEffect } from "react";
 import {
   compute,
