@@ -440,8 +440,8 @@ export default function App() {
             dmj={out.dmjEnd}
             t13={out.t13}
             end={endDT!}
-            nonMajHours={nonMaj}
-            majHours={maj}
+            nonMajHours={Math.max(0, Math.loor(nonMaj))}
+            majHours={Math.max(0, Math.floor(maj))}
             dayType={dayType}
           />
         </div>
@@ -456,7 +456,20 @@ export default function App() {
 } // <-- close App component here
 
 /* ============ Frise chronologique (acronymes sur la ligne) ============ */
-function FriseTimeline(props: {
+function FriseTimeline(props: { /* ... */ }) {
+   // Force des entiers non négatifs
+   const nTop = Math.max(0, Math.floor(props.nonMajhours));
+   const nBot = Math.max(0, Math.floor(props.majHours)),
+
+      const hourW = 56;
+   const lineLenTop = Math.max(1, nTop) * hourW;
+   const lineLenBot = Math.max(1, nBot) * hourW;
+   // ...
+   {/* heures distribuées */}
+   {Array.from({ length: nTop }).map((_, i) => { /* ... */ })}
+   {/* heures majorées */}
+   {Array.from({ length: nBot }).map((_, i) => { /* ... */ })}
+}
   start: Date;         // PDS
   dmj: Date;           // fin DMJ
   t13: Date;           // début amplitude
