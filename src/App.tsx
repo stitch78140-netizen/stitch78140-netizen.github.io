@@ -414,81 +414,69 @@ export default function App() {
   );
 } // <-- close App component here
 
-/* ============ Frise chronologique (acronymes sous chaque trait) ============ */
+/* ============ Frise chronologique (acronymes visibles) ============ */
 function FriseTimeline(props: {
-  start: Date;         // PDS
-  dmj: Date;           // DMJ
-  t13: Date;           // Amplitude
-  end: Date;           // FDS (non utilisé)
-  nonMajHours: number; // HS/HSN depuis DMJ
-  majHours: number;    // HSM/HDM/HNM depuis Amplitude
-  dayType: DayType;    // SO | R | RH (dimanche)
+  start: Date; dmj: Date; t13: Date; end: Date;
+  nonMajHours: number; majHours: number; dayType: DayType;
 }) {
-  // Helpers
-  const hm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const hm = (d: Date) => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
   const isNight = (d: Date) => (d.getHours() >= 21 || d.getHours() < 6);
 
-  // Acronymes « jour » selon type
   const DAY_NON_MAJ = props.dayType === "RH" ? "HSD" : "HS";
   const DAY_MAJ     = props.dayType === "RH" ? "HDM" : "HSM";
 
-  // Mise en page
-  const PADL = 90;     // marge gauche (place pour Pds/DMJ/Amplitude)
-  const PADR = 16;
-  const Y1   = 48;     // y ligne 1
-  const Y2   = 128;    // y ligne 2
-  const hourW = 56;    // espacement entre traits
+  // layout
+  const PADL = 90, PADR = 16;
+  const hourW = 56;
   const lenTop = Math.max(1, props.nonMajHours) * hourW;
   const lenBot = Math.max(1, props.majHours) * hourW;
-  const totalW = Math.max(PADL + PADR + lenTop, PADL + PADR + lenBot, 440);
-  const totalH = props.majHours > 0 ? 180 : 100;
 
-  // « trait » avec heure + acronyme
+  // block heights so labels (hours + acronym) fit
+  const HEADER_H = 24;
+  const TOP_H    = 78;           // top line block height
+  const BOT_H    = props.majHours > 0 ? 100 : 0;  // bottom line block height
+  const totalW   = Math.max(PADL + PADR + lenTop, PADL + PADR + lenBot, 440);
+  const totalH   = HEADER_H + TOP_H + BOT_H;
+
+  // y positions
+  const Y1 = HEADER_H + 32;                 // line 1 y
+  const Y2 = props.majHours > 0 ? HEADER_H + TOP_H + 32 : 0;
+
+  // generic tick with hour + acronym under it
   function tick(x: number, y: number, t: Date, acr: string) {
     const night = isNight(t);
     const color = night ? "#dc2626" : "#111827";
     return (
       <g>
         <line x1={x} y1={y - 12} x2={x} y2={y + 12} stroke={color} strokeWidth="2" />
-        {/* heure */}
-        <text x={x} y={y + 22} textAnchor="middle" fontSize="12" fill={color}>
-          {hm(t)}
-        </text>
-        {/* acronyme sous l’heure */}
-        <text x={x} y={y + 38} textAnchor="middle" fontSize="11" fill={color} fontWeight="600">
-          {acr}
-        </text>
+        <text x={x} y={y + 20} textAnchor="middle" fontSize="12" fill={color}>{hm(t)}</text>
+        <text x={x} y={y + 38} textAnchor="middle" fontSize="12" fontWeight="600" fill={color}>{acr}</text>
       </g>
     );
   }
 
-  // Repère nommé (Pds / DMJ / Amplitude)
+  // named ticks (Pds / DMJ / Amplitude)
   function namedTick(x: number, y: number, t: Date, label: string) {
     const night = isNight(t);
     const color = night ? "#dc2626" : "#111827";
     return (
       <g>
-        <text x={x} y={y - 16} textAnchor="middle" fontSize="11" fill="#374151">{label}</text>
+        <text x={x} y={y - 18} textAnchor="middle" fontSize="11" fill="#374151">{label}</text>
         <line x1={x} y1={y - 12} x2={x} y2={y + 12} stroke={color} strokeWidth="2" />
-        <text x={x} y={y + 22} textAnchor="middle" fontSize="12" fill={color}>{hm(t)}</text>
+        <text x={x} y={y + 20} textAnchor="middle" fontSize="12" fill={color}>{hm(t)}</text>
       </g>
     );
   }
 
   return (
     <svg width="100%" height={totalH} viewBox={`0 0 ${totalW} ${totalH}`}>
-      {/* En-tête : affiche les types réellement présents (calcul implicite via lignes) */}
-      <text x={PADL} y={16} fontSize="13" fontWeight="600" fill="#111827">
-        Répartition
-      </text>
+      <text x={PADL} y={16} fontSize="13" fontWeight="600" fill="#111827">Répartition</text>
 
-      {/* ===== Ligne 1 : non majorées (depuis DMJ) ===== */}
+      {/* Ligne 1 : non majorées (DMJ → …) */}
       <line x1={PADL} y1={Y1} x2={PADL + lenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
-      {/* Pds → DMJ (pointillé) */}
       <line x1={PADL - 48} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
       {namedTick(PADL - 48, Y1, props.start, "Pds")}
       {namedTick(PADL,      Y1, props.dmj,   "DMJ")}
-      {/* heures distribuées (HS / HSD / HSN) */}
       {Array.from({ length: props.nonMajHours }).map((_, i) => {
         const t = new Date(props.dmj.getTime() + (i + 1) * 3600000);
         const x = PADL + (i + 1) * hourW;
@@ -496,12 +484,11 @@ function FriseTimeline(props: {
         return <g key={`nm-${i}`}>{tick(x, Y1, t, acr)}</g>;
       })}
 
-      {/* ===== Ligne 2 : majorées (depuis Amplitude) ===== */}
+      {/* Ligne 2 : majorées (Amplitude → …) */}
       {props.majHours > 0 && (
         <>
           <line x1={PADL} y1={Y2} x2={PADL + lenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
           {namedTick(PADL, Y2, props.t13, "Amplitude")}
-          {/* heures majorées (HSM / HDM / HNM) */}
           {Array.from({ length: props.majHours }).map((_, i) => {
             const t = new Date(props.t13.getTime() + (i + 1) * 3600000);
             const x = PADL + (i + 1) * hourW;
