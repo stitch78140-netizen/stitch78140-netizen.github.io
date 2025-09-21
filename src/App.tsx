@@ -469,7 +469,7 @@ function FriseTimeline(props: { /* ... */ }) {
    {Array.from({ length: nTop }).map((_, i) => { /* ... */ })}
    {/* heures majorées */}
    {Array.from({ length: nBot }).map((_, i) => { /* ... */ })}
-}
+
   start: Date;         // PDS
   dmj: Date;           // fin DMJ
   t13: Date;           // début amplitude
