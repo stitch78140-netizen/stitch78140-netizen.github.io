@@ -414,86 +414,102 @@ export default function App() {
   );
 } // <-- close App component here
 
-/* ============ Frise chronologique (acronymes visibles) ============ */
+/* ============ Frise chronologique : acronymes ENTRE les traits ============ */
 function FriseTimeline(props: {
   start: Date; dmj: Date; t13: Date; end: Date;
   nonMajHours: number; majHours: number; dayType: DayType;
 }) {
   const hm = (d: Date) => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-  const isNight = (d: Date) => (d.getHours() >= 21 || d.getHours() < 6);
+  const minOfDay = (d: Date) => d.getHours()*60 + d.getMinutes();
+
+  // "Heure entièrement de nuit" = l'intervalle [s, s+1h) est contenu dans 21:00–24:00 ou 00:00–06:00
+  function fullNightHour(s: Date): boolean {
+    const m = minOfDay(s);
+    const mEnd = (m + 60) % (24*60);
+    const crossesMidnight = m + 60 >= 24*60;
+    // cas 1 : départ entre 21:00 et 23:59 → toujours nuit
+    if (m >= 21*60) return true;
+    // cas 2 : départ entre 00:00 et <06:00 et fin <06:00 → nuit
+    if (m < 6*60 && (!crossesMidnight) && mEnd <= 6*60) return true;
+    // cas 3 : départ 23:xx → fin 00:xx (<06:00) → nuit (déjà couvert par cas1)
+    // sinon pas nuit complète
+    return false;
+  }
 
   const DAY_NON_MAJ = props.dayType === "RH" ? "HSD" : "HS";
   const DAY_MAJ     = props.dayType === "RH" ? "HDM" : "HSM";
 
-  // layout
+  // mise en page
   const PADL = 90, PADR = 16;
   const hourW = 56;
   const lenTop = Math.max(1, props.nonMajHours) * hourW;
   const lenBot = Math.max(1, props.majHours) * hourW;
 
-  // block heights so labels (hours + acronym) fit
   const HEADER_H = 24;
-  const TOP_H    = 78;           // top line block height
-  const BOT_H    = props.majHours > 0 ? 100 : 0;  // bottom line block height
+  const TOP_H    = 84;                         // un peu plus haut pour placer l’acronyme entre les traits
+  const BOT_H    = props.majHours > 0 ? 104 : 0;
   const totalW   = Math.max(PADL + PADR + lenTop, PADL + PADR + lenBot, 440);
   const totalH   = HEADER_H + TOP_H + BOT_H;
 
-  // y positions
-  const Y1 = HEADER_H + 32;                 // line 1 y
+  const Y1 = HEADER_H + 32;                   // y ligne 1
   const Y2 = props.majHours > 0 ? HEADER_H + TOP_H + 32 : 0;
 
-  // generic tick with hour + acronym under it
-  function tick(x: number, y: number, t: Date, acr: string) {
-    const night = isNight(t);
-    const color = night ? "#dc2626" : "#111827";
+  // petit helper : dessine un trait vertical + heure sous le trait (couleur neutre pour éviter la confusion)
+  function tick(x: number, y: number, t: Date, labelAbove?: string) {
     return (
       <g>
-        <line x1={x} y1={y - 12} x2={x} y2={y + 12} stroke={color} strokeWidth="2" />
-        <text x={x} y={y + 20} textAnchor="middle" fontSize="12" fill={color}>{hm(t)}</text>
-        <text x={x} y={y + 38} textAnchor="middle" fontSize="12" fontWeight="600" fill={color}>{acr}</text>
+        {labelAbove && <text x={x} y={y-18} textAnchor="middle" fontSize="11" fill="#374151">{labelAbove}</text>}
+        <line x1={x} y1={y-12} x2={x} y2={y+12} stroke="#111827" strokeWidth="2" />
+        <text x={x} y={y+20} textAnchor="middle" fontSize="12" fill="#111827">{hm(t)}</text>
       </g>
     );
   }
 
-  // named ticks (Pds / DMJ / Amplitude)
-  function namedTick(x: number, y: number, t: Date, label: string) {
-    const night = isNight(t);
-    const color = night ? "#dc2626" : "#111827";
-    return (
-      <g>
-        <text x={x} y={y - 18} textAnchor="middle" fontSize="11" fill="#374151">{label}</text>
-        <line x1={x} y1={y - 12} x2={x} y2={y + 12} stroke={color} strokeWidth="2" />
-        <text x={x} y={y + 20} textAnchor="middle" fontSize="12" fill={color}>{hm(t)}</text>
-      </g>
-    );
+  // acronyme centré entre deux traits
+  function acrBetween(x1: number, x2: number, y: number, tStart: Date, dayAcr: string, nightAcr: string) {
+    const isNight = fullNightHour(tStart);
+    const acr = isNight ? nightAcr : dayAcr;
+    const color = isNight ? "#dc2626" : "#111827";
+    const xm = (x1 + x2) / 2;
+    return <text x={xm} y={y+38} textAnchor="middle" fontSize="12" fontWeight="600" fill={color}>{acr}</text>;
   }
 
   return (
     <svg width="100%" height={totalH} viewBox={`0 0 ${totalW} ${totalH}`}>
       <text x={PADL} y={16} fontSize="13" fontWeight="600" fill="#111827">Répartition</text>
 
-      {/* Ligne 1 : non majorées (DMJ → …) */}
+      {/* ===== Ligne 1 : HS/HSN depuis DMJ ===== */}
+      {/* base */}
       <line x1={PADL} y1={Y1} x2={PADL + lenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
-      <line x1={PADL - 48} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
-      {namedTick(PADL - 48, Y1, props.start, "Pds")}
-      {namedTick(PADL,      Y1, props.dmj,   "DMJ")}
+      {/* Pds vers DMJ (pointillés) */}
+      <line x1={PADL-48} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
+      {tick(PADL-48, Y1, props.start, "Pds")}
+      {tick(PADL,    Y1, props.dmj,   "DMJ")}
+      {/* heures distribuées : traits + acronyme ENTRE les traits */}
       {Array.from({ length: props.nonMajHours }).map((_, i) => {
-        const t = new Date(props.dmj.getTime() + (i + 1) * 3600000);
-        const x = PADL + (i + 1) * hourW;
-        const acr = isNight(t) ? "HSN" : DAY_NON_MAJ;
-        return <g key={`nm-${i}`}>{tick(x, Y1, t, acr)}</g>;
+        const s = new Date(props.dmj.getTime() + i*3600000);
+        const x1 = PADL + i*hourW;
+        const x2 = PADL + (i+1)*hourW;
+        // trait de l’heure suivante
+        const tNext = new Date(s.getTime() + 3600000);
+        const tickEl = tick(x2, Y1, tNext, undefined);
+        const acrEl  = acrBetween(x1, x2, Y1, s, DAY_NON_MAJ, "HSN");
+        return <g key={`nm-${i}`}>{tickEl}{acrEl}</g>;
       })}
 
-      {/* Ligne 2 : majorées (Amplitude → …) */}
+      {/* ===== Ligne 2 : HSM/HNM (ou HDM/HNM) depuis Amplitude ===== */}
       {props.majHours > 0 && (
         <>
           <line x1={PADL} y1={Y2} x2={PADL + lenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
-          {namedTick(PADL, Y2, props.t13, "Amplitude")}
+          {tick(PADL, Y2, props.t13, "Amplitude")}
           {Array.from({ length: props.majHours }).map((_, i) => {
-            const t = new Date(props.t13.getTime() + (i + 1) * 3600000);
-            const x = PADL + (i + 1) * hourW;
-            const acr = isNight(t) ? "HNM" : DAY_MAJ;
-            return <g key={`m-${i}`}>{tick(x, Y2, t, acr)}</g>;
+            const s = new Date(props.t13.getTime() + i*3600000);
+            const x1 = PADL + i*hourW;
+            const x2 = PADL + (i+1)*hourW;
+            const tNext = new Date(s.getTime() + 3600000);
+            const tickEl = tick(x2, Y2, tNext, undefined);
+            const acrEl  = acrBetween(x1, x2, Y2, s, DAY_MAJ, "HNM");
+            return <g key={`m-${i}`}>{tickEl}{acrEl}</g>;
           })}
         </>
       )}
