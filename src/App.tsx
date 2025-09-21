@@ -414,7 +414,7 @@ export default function App() {
   );
 } // <-- close App component here
 
-/* ============ Frise chronologique (simple & lisible) ============ */
+/* ============ Frise chronologique (auto-acronymes utilisés) ============ */
 function FriseTimeline(props: {
   start: Date;         // PDS
   dmj: Date;           // DMJ atteinte
@@ -424,31 +424,44 @@ function FriseTimeline(props: {
   majHours: number;    // HSM / HNM (à partir de Amplitude)
   dayType: DayType;    // pour libellés (dimanche => HSD/HDM)
 }) {
-  // libellé d’en-tête automatique
-  const topAcr = props.dayType === "RH" ? "HSD / HSN" : "HS / HSN";
-  const botAcr = props.dayType === "RH" ? "HDM / HNM" : "HSM / HNM";
-  const header = `Répartition : ${topAcr} · ${botAcr}`;
+  // --- helpers
+  const hm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const isNight = (d: Date) => (d.getHours() >= 21 || d.getHours() < 6);
 
-  // dimensions
-  const PADL = 90;          // marge gauche (laisse la place aux libellés)
+  // acronyme de jour / nuit selon type
+  const dayNonMaj = props.dayType === "RH" ? "HSD" : "HS";
+  const dayMaj    = props.dayType === "RH" ? "HDM" : "HSM";
+
+  // acronymes réellement utilisés (calculés heure par heure)
+  const used = new Set<string>();
+
+  // heures non majorées à partir de DMJ
+  for (let i = 0; i < props.nonMajHours; i++) {
+    const t = new Date(props.dmj.getTime() + (i + 1) * 3600000);
+    used.add(isNight(t) ? "HSN" : dayNonMaj);
+  }
+  // heures majorées à partir de t13
+  for (let i = 0; i < props.majHours; i++) {
+    const t = new Date(props.t13.getTime() + (i + 1) * 3600000);
+    used.add(isNight(t) ? "HNM" : dayMaj);
+  }
+
+  // En-tête affiché : uniquement ce qui est effectivement distribué
+  const header = "Répartition : " + (Array.from(used).join(" · ") || "—");
+
+  // --- mise en page
+  const PADL = 90;    // marge gauche
   const PADR = 16;
-  const Y1 = 48;            // y ligne 1
-  const Y2 = 118;           // y ligne 2
-  const hourW = 56;         // écart visuel entre deux heures
+  const Y1 = 48;      // y ligne 1
+  const Y2 = 118;     // y ligne 2
+  const hourW = 56;   // espacement entre heures
   const lenTop = Math.max(1, props.nonMajHours) * hourW;
   const lenBot = Math.max(1, props.majHours) * hourW;
   const totalW = Math.max(PADL + PADR + lenTop, PADL + PADR + lenBot, 420);
   const totalH = props.majHours > 0 ? 150 : 90;
 
-  // helpers
-  const hm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  const isNight = (d: Date) => {
-    const h = d.getHours();
-    return h >= 21 || h < 6;
-  };
   const tick = (x: number, y: number, label: string, night: boolean, tagAbove?: string) => (
     <g>
-      {/* petit label au-dessus (DMJ / Amplitude / Pds) si fourni */}
       {tagAbove && (
         <text x={x} y={y - 16} textAnchor="middle" fontSize="11" fill="#374151">
           {tagAbove}
@@ -463,34 +476,28 @@ function FriseTimeline(props: {
 
   return (
     <svg width="100%" height={totalH + 30} viewBox={`0 0 ${totalW} ${totalH + 30}`}>
-      {/* En-tête */}
+      {/* En-tête (uniquement les acronymes réellement attribués) */}
       <text x={PADL} y={16} fontSize="13" fontWeight="600" fill="#111827">{header}</text>
 
-      {/* ===== Ligne 1 : HS/HSN (depuis DMJ) avec repère Pds ===== */}
-      <text x={16} y={Y1 + 4} fontSize="12" fill="#374151">{topAcr}</text>
-      {/* base */}
+      {/* ===== Ligne 1 : non majorées (depuis DMJ) avec repère Pds ===== */}
+      {/* ligne de base + segment pointillé Pds→DMJ */}
       <line x1={PADL} y1={Y1} x2={PADL + lenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
-      {/* Pds -> DMJ (segment pointillé) */}
       <line x1={PADL - 48} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
-      {/* repères Pds et DMJ */}
+      {/* repères Pds & DMJ */}
       {tick(PADL - 48, Y1, hm(props.start), isNight(props.start), "Pds")}
-      {tick(PADL, Y1, hm(props.dmj), isNight(props.dmj), "DMJ")}
-      {/* heures distribuées après DMJ */}
+      {tick(PADL,      Y1, hm(props.dmj),   isNight(props.dmj),   "DMJ")}
+      {/* heures distribuées */}
       {Array.from({ length: props.nonMajHours }).map((_, i) => {
         const t = new Date(props.dmj.getTime() + (i + 1) * 3600000);
         const x = PADL + (i + 1) * hourW;
         return tick(x, Y1, hm(t), isNight(t));
       })}
 
-      {/* ===== Ligne 2 : HSM/HNM (ou HDM/HNM) depuis Amplitude ===== */}
+      {/* ===== Ligne 2 : majorées (depuis Amplitude) ===== */}
       {props.majHours > 0 && (
         <>
-          <text x={16} y={Y2 + 4} fontSize="12" fill="#374151">{botAcr}</text>
-          {/* base */}
           <line x1={PADL} y1={Y2} x2={PADL + lenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
-          {/* repère Amplitude */}
           {tick(PADL, Y2, hm(props.t13), isNight(props.t13), "Amplitude")}
-          {/* heures majorées distribuées */}
           {Array.from({ length: props.majHours }).map((_, i) => {
             const t = new Date(props.t13.getTime() + (i + 1) * 3600000);
             const x = PADL + (i + 1) * hourW;
