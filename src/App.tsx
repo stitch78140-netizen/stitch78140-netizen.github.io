@@ -477,7 +477,7 @@ function FriseTimeline(props: { /* ... */ }) {
   nonMajHours: number; // HS/HSN (non majorées) à partir de DMJ
   majHours: number;    // HSM/HDM/HNM à partir de t13 (amplitude)
   dayType: DayType;    // pour les libellés (HSM ↔ HDM)
-} {
+ {
   const W = 520;        // largeur mini
   const H = 170;        // hauteur totale
   const PADL = 58;      // marge gauche
