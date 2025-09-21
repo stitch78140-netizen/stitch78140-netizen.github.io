@@ -414,20 +414,22 @@ export default function App() {
   );
 } // <-- close App component here
 
-/* ============ Frise chronologique corrigée ============ */
+/* ============ Frise chronologique ============ */
 function FriseTimeline(props: {
   start: Date; dmj: Date; t13: Date; end: Date;
-  nonMajHours: number; majHours: number; dayType: DayType;
+  nonMajHours: number; majHours: number; dayType: "SO" | "R" | "RH";
 }) {
-  const hm = (d: Date) => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-  const minOfDay = (d: Date) => d.getHours()*60 + d.getMinutes();
+  const hm = (d: Date) =>
+    `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 
-  function fullNightHour(s: Date): boolean {
-    const m = minOfDay(s);
-    const mEnd = (m + 60) % (24*60);
-    const crossesMidnight = m + 60 >= 24*60;
-    if (m >= 21*60) return true;
-    if (m < 6*60 && (!crossesMidnight) && mEnd <= 6*60) return true;
+  // Une heure complète est "nuit" si le créneau [t, t+1h) est entièrement dans 21:00–06:00.
+  function isFullNightHour(s: Date): boolean {
+    const m = s.getHours()*60 + s.getMinutes();
+    const e = (m + 60) % (24*60);
+    const crossMid = m + 60 >= 24*60;
+    if (m >= 21*60) return true;             // 21:00 → minuit
+    if (m < 6*60 && !crossMid && e <= 6*60)  // 00:00–06:00
+      return true;
     return false;
   }
 
@@ -448,23 +450,34 @@ function FriseTimeline(props: {
   const Y1 = HEADER_H + 32;
   const Y2 = props.majHours > 0 ? HEADER_H + TOP_H + 32 : 0;
 
-  function tick(x: number, y: number, t: Date, labelAbove?: string) {
-    return (
-      <g>
-        {labelAbove && <text x={x} y={y-18} textAnchor="middle" fontSize="11" fill="#374151">{labelAbove}</text>}
-        <line x1={x} y1={y-12} x2={x} y2={y+12} stroke="#111827" strokeWidth="2" />
-        <text x={x} y={y+20} textAnchor="middle" fontSize="12" fill="#111827">{hm(t)}</text>
-      </g>
-    );
-  }
+  const tick = (x: number, y: number, t: Date, labelAbove?: string) => (
+    <g>
+      {labelAbove && (
+        <text x={x} y={y-18} textAnchor="middle" fontSize="11" fill="#374151">
+          {labelAbove}
+        </text>
+      )}
+      <line x1={x} y1={y-12} x2={x} y2={y+12} stroke="#111827" strokeWidth="2" />
+      <text x={x} y={y+20} textAnchor="middle" fontSize="12" fill="#111827">
+        {hm(t)}
+      </text>
+    </g>
+  );
 
-  function acrBetween(x1: number, x2: number, y: number, tStart: Date, dayAcr: string, nightAcr: string) {
-    const isNight = fullNightHour(tStart);
-    const acr = isNight ? nightAcr : dayAcr;
-    const color = isNight ? "#dc2626" : "#111827";
+  const acrBetween = (
+    x1: number, x2: number, y: number, tStart: Date, dayAcr: string, nightAcr: string
+  ) => {
+    const night = isFullNightHour(tStart);
+    const acr   = night ? nightAcr : dayAcr;
+    const color = night ? "#dc2626" : "#111827";
     const xm = (x1 + x2) / 2;
-    return <text x={xm} y={y+28} textAnchor="middle" fontSize="12" fontWeight="600" fill={color}>{acr}</text>;
-  }
+    // Acronymes remontés (plus proche de la ligne)
+    return (
+      <text x={xm} y={y+22} textAnchor="middle" fontSize="12" fontWeight="600" fill={color}>
+        {acr}
+      </text>
+    );
+  };
 
   return (
     <svg width="100%" height={totalH} viewBox={`0 0 ${totalW} ${totalH}`}>
@@ -473,38 +486,38 @@ function FriseTimeline(props: {
         RÉPARTITION DES HEURES
       </text>
 
-      {/* Ligne 1 */}
+      {/* Ligne 1 : HS/HSN depuis DMJ */}
       <line x1={PADL} y1={Y1} x2={PADL + lenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
       <line x1={PADL-48} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
       {tick(PADL-48, Y1, props.start, "Pds")}
       {tick(PADL,    Y1, props.dmj,   "DMJ")}
-      {Array.from({ length: props.nonMajHours }).map((_, i) => {
-        const s = new Date(props.dmj.getTime() + i*3600000);
+      {Array.from({ length: Math.max(0, props.nonMajHours|0) }).map((_, i) => {
+        const segStart = new Date(props.dmj.getTime() + i*3600000);
         const x1 = PADL + i*hourW;
         const x2 = PADL + (i+1)*hourW;
-        const tNext = new Date(s.getTime() + 3600000);
+        const segEnd = new Date(segStart.getTime() + 3600000);
         return (
           <g key={`nm-${i}`}>
-            {tick(x2, Y1, tNext)}
-            {acrBetween(x1, x2, Y1, s, DAY_NON_MAJ, "HSN")}
+            {tick(x2, Y1, segEnd)}
+            {acrBetween(x1, x2, Y1, segStart, DAY_NON_MAJ, "HSN")}
           </g>
         );
       })}
 
-      {/* Ligne 2 */}
+      {/* Ligne 2 : HSM/HNM depuis Amplitude */}
       {props.majHours > 0 && (
         <>
           <line x1={PADL} y1={Y2} x2={PADL + lenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
           {tick(PADL, Y2, props.t13, "Amplitude")}
-          {Array.from({ length: props.majHours }).map((_, i) => {
-            const s = new Date(props.t13.getTime() + i*3600000);
+          {Array.from({ length: Math.max(0, props.majHours|0) }).map((_, i) => {
+            const segStart = new Date(props.t13.getTime() + i*3600000);
             const x1 = PADL + i*hourW;
             const x2 = PADL + (i+1)*hourW;
-            const tNext = new Date(s.getTime() + 3600000);
+            const segEnd = new Date(segStart.getTime() + 3600000);
             return (
               <g key={`m-${i}`}>
-                {tick(x2, Y2, tNext)}
-                {acrBetween(x1, x2, Y2, s, DAY_MAJ, "HNM")}
+                {tick(x2, Y2, segEnd)}
+                {acrBetween(x1, x2, Y2, segStart, DAY_MAJ, "HNM")}
               </g>
             );
           })}
