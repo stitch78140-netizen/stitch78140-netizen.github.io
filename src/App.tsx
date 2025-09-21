@@ -410,13 +410,36 @@ export default function App() {
       </div>
     </div>
 
-    {/* Répartition des heures (résultat crédité) */}
+   {/* Ventilation / Répartition */}
+{out && (
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+    {/* VENTILATION */}
+    <div style={{ ...card, marginTop: 12 }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Ventilation des heures</div>
+      <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
+        {/* HS non majorées (base) */}
+        {out.HS  > 0 && (<><div>{out.HS} {dayType === "RH" ? "HSD" : "HS"}</div><div /></>)}
+
+        {/* Lignes "à majorer" (une seule ligne par type) */}
+        {(() => {
+          const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
+          const pct = `${factor*100}%`;
+          return (
+            <>
+              {out.HSM > 0 && (<><div>{out.HSM} HS × {pct}</div><div /></>)}
+              {out.HSN > 0 && (<><div>{out.HSN} HSN × {pct}</div><div /></>)}
+            </>
+          );
+        })()}
+      </div>
+    </div>
+
+    {/* RÉPARTITION (créditée) */}
     <div style={{ ...card, marginTop: 12 }}>
       <div style={{ fontWeight: 600, marginBottom: 8 }}>Répartition des heures</div>
       <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
         {/* Non majorées rendues telles quelles */}
-        {out.HS  > 0 && (<><div>{out.HS} HS</div><div /></>)}
-        {out.HSN > 0 && (<><div>{out.HSN} HSN</div><div /></>)}
+        {out.HS  > 0 && (<><div>{out.HS} {dayType === "RH" ? "HSD" : "HS"}</div><div /></>)}
 
         {/* Crédits majorés (après application du facteur) */}
         {(() => {
@@ -441,7 +464,7 @@ export default function App() {
       {/* DP crédits */}
       <div style={{ marginTop: 8, color: "#b91c1c", fontWeight: 600 }}>
         {dayType === "R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
-        {dayType === "RH" && "Crédit de 1,5 ou 2 RCJ + 1 RL au titre du DP sur le RH"}
+        {dayType === "RH" && "Crédit de 1,5 RCJ ou 2 RCJ + 1 RL au titre du DP sur le RH"}
       </div>
     </div>
   </div>
