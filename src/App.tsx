@@ -414,72 +414,88 @@ export default function App() {
   );
 } // <-- close App component here
 
-/* ============ Frise chronologique ============ */
+/* ============ Frise chronologique (simple & lisible) ============ */
 function FriseTimeline(props: {
   start: Date;         // PDS
-  dmj: Date;           // fin DMJ
-  t13: Date;           // début amplitude
-  end: Date;           // FDS
-  nonMajHours: number; // HS/HSN (depuis DMJ)
-  majHours: number;    // HSM/HNM (depuis t13)
-  dayType: DayType;    // libellés
+  dmj: Date;           // DMJ atteinte
+  t13: Date;           // Amplitude (début majoration)
+  end: Date;           // FDS (non utilisé ici)
+  nonMajHours: number; // HS / HSN (à partir de DMJ)
+  majHours: number;    // HSM / HNM (à partir de Amplitude)
+  dayType: DayType;    // pour libellés (dimanche => HSD/HDM)
 }) {
-  const W = 500, H = 110;
-  const PADL = 80, PADR = 16;
-  const Y1 = 28, Y2 = 78, gap = 44;
+  // libellé d’en-tête automatique
+  const topAcr = props.dayType === "RH" ? "HSD / HSN" : "HS / HSN";
+  const botAcr = props.dayType === "RH" ? "HDM / HNM" : "HSM / HNM";
+  const header = `Répartition : ${topAcr} · ${botAcr}`;
 
-  const topLabel = props.dayType === "RH" ? "HSD / HSN" : "HS / HSN";
-  const botLabel = props.dayType === "RH" ? "HDM / HNM" : "HSM / HNM";
+  // dimensions
+  const PADL = 90;          // marge gauche (laisse la place aux libellés)
+  const PADR = 16;
+  const Y1 = 48;            // y ligne 1
+  const Y2 = 118;           // y ligne 2
+  const hourW = 56;         // écart visuel entre deux heures
+  const lenTop = Math.max(1, props.nonMajHours) * hourW;
+  const lenBot = Math.max(1, props.majHours) * hourW;
+  const totalW = Math.max(PADL + PADR + lenTop, PADL + PADR + lenBot, 420);
+  const totalH = props.majHours > 0 ? 150 : 90;
 
-  const hourW = 56;
-  const lineLenTop = Math.max(1, props.nonMajHours) * hourW;
-  const lineLenBot = Math.max(1, props.majHours) * hourW;
-
-  const hm = (d: Date) => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-  const isNight = (d: Date) => { const h=d.getHours(); return h>=21 || h<6; };
-
-  const Tick = ({ x, y, d }: { x:number; y:number; d:Date }) => {
-    const night = isNight(d);
-    const color = night ? "#dc2626" : "#111827";
-    return (
-      <g>
-        <line x1={x} y1={y-12} x2={x} y2={y+12} stroke={color} strokeWidth="2" />
-        <text x={x} y={y+22} textAnchor="middle" fontSize="12" fill={color}>{hm(d)}</text>
-      </g>
-    );
+  // helpers
+  const hm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const isNight = (d: Date) => {
+    const h = d.getHours();
+    return h >= 21 || h < 6;
   };
-
-  const viewW = Math.max(W, PADL + PADR + Math.max(lineLenTop, lineLenBot));
-  const viewH = props.majHours > 0 ? H : H - gap;
+  const tick = (x: number, y: number, label: string, night: boolean, tagAbove?: string) => (
+    <g>
+      {/* petit label au-dessus (DMJ / Amplitude / Pds) si fourni */}
+      {tagAbove && (
+        <text x={x} y={y - 16} textAnchor="middle" fontSize="11" fill="#374151">
+          {tagAbove}
+        </text>
+      )}
+      <line x1={x} y1={y - 12} x2={x} y2={y + 12} stroke={night ? "#dc2626" : "#111827"} strokeWidth="2" />
+      <text x={x} y={y + 22} textAnchor="middle" fontSize="12" fill={night ? "#dc2626" : "#111827"}>
+        {label}
+      </text>
+    </g>
+  );
 
   return (
-    <svg width="100%" height={viewH} viewBox={`0 0 ${viewW} ${viewH}`}>
-      {/* Ligne 1 : HS / HSN */}
-      <text x={12} y={Y1+4} fontSize="12" fill="#374151">{topLabel}</text>
-      <line x1={PADL} y1={Y1} x2={PADL+lineLenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
-      {/* PDS -> DMJ (pointillés) */}
-      <g key="pds">{/* key pour éviter l'avertissement React */}
-        <Tick x={PADL-40} y={Y1} d={props.start} />
-        <line x1={PADL-40} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
-      </g>
-      <Tick x={PADL} y={Y1} d={props.dmj} />
-      {Array.from({ length: props.nonMajHours }).map((_, i) => (
-        <g key={`n-${i}`}>
-          <Tick x={PADL + (i+1)*hourW} y={Y1} d={new Date(props.dmj.getTime() + i*3600000)} />
-        </g>
-      ))}
+    <svg width="100%" height={totalH + 30} viewBox={`0 0 ${totalW} ${totalH + 30}`}>
+      {/* En-tête */}
+      <text x={PADL} y={16} fontSize="13" fontWeight="600" fill="#111827">{header}</text>
 
-      {/* Ligne 2 : HSM / HNM */}
+      {/* ===== Ligne 1 : HS/HSN (depuis DMJ) avec repère Pds ===== */}
+      <text x={16} y={Y1 + 4} fontSize="12" fill="#374151">{topAcr}</text>
+      {/* base */}
+      <line x1={PADL} y1={Y1} x2={PADL + lenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
+      {/* Pds -> DMJ (segment pointillé) */}
+      <line x1={PADL - 48} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
+      {/* repères Pds et DMJ */}
+      {tick(PADL - 48, Y1, hm(props.start), isNight(props.start), "Pds")}
+      {tick(PADL, Y1, hm(props.dmj), isNight(props.dmj), "DMJ")}
+      {/* heures distribuées après DMJ */}
+      {Array.from({ length: props.nonMajHours }).map((_, i) => {
+        const t = new Date(props.dmj.getTime() + (i + 1) * 3600000);
+        const x = PADL + (i + 1) * hourW;
+        return tick(x, Y1, hm(t), isNight(t));
+      })}
+
+      {/* ===== Ligne 2 : HSM/HNM (ou HDM/HNM) depuis Amplitude ===== */}
       {props.majHours > 0 && (
         <>
-          <text x={12} y={Y2+4} fontSize="12" fill="#374151">{botLabel}</text>
-          <line x1={PADL} y1={Y2} x2={PADL+lineLenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
-          <Tick x={PADL} y={Y2} d={props.t13} />
-          {Array.from({ length: props.majHours }).map((_, i) => (
-            <g key={`m-${i}`}>
-              <Tick x={PADL + (i+1)*hourW} y={Y2} d={new Date(props.t13.getTime() + i*3600000)} />
-            </g>
-          ))}
+          <text x={16} y={Y2 + 4} fontSize="12" fill="#374151">{botAcr}</text>
+          {/* base */}
+          <line x1={PADL} y1={Y2} x2={PADL + lenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
+          {/* repère Amplitude */}
+          {tick(PADL, Y2, hm(props.t13), isNight(props.t13), "Amplitude")}
+          {/* heures majorées distribuées */}
+          {Array.from({ length: props.majHours }).map((_, i) => {
+            const t = new Date(props.t13.getTime() + (i + 1) * 3600000);
+            const x = PADL + (i + 1) * hourW;
+            return tick(x, Y2, hm(t), isNight(t));
+          })}
         </>
       )}
     </svg>
