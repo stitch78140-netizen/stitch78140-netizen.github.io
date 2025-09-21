@@ -155,7 +155,7 @@ export default function App() {
 
   /* Libellés & répartition */
   const HS_label  = dayType === "RH" ? "HSD" : "HS";
-  const HSM_label = dayType === "RH" ? "HDM" : "HSM";
+  const HSM_label = dayType === "RH" ? "HSDM" : "HSM";
   const factor    = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
 
   const nonMaj = out ? Math.min(out.A_hours, out.B_total_h) : 0;
@@ -417,7 +417,7 @@ export default function App() {
           return (
             <>
               {creditedHSM > 0 && (<><div>{fmt(creditedHSM)} {HSM_label}</div><div /></>)}
-              {creditedHNM > 0 && (<><div>{fmt(creditedHNM)} HNM</div><div /></>)}
+              {creditedHNM > 0 && (<><div>{fmt(creditedHNM)} HSNM</div><div /></>)}
             </>
           );
         })()}
@@ -472,7 +472,7 @@ function FriseTimeline(props: {
   const Y1 = 62;        // y de la ligne 1
   const Y2 = 132;       // y de la ligne 2
   const hourW = 56;     // distance entre deux heures
-
+  const isSunday = props.dayType === "RH"; // dimanche
   const fmt = (d: Date) =>
     `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 
@@ -551,13 +551,12 @@ function FriseTimeline(props: {
         const x1 = PADL + i * hourW;
         const x2 = PADL + (i + 1) * hourW;
         const night = isFullNightHour(s, e);
-        const label = night
-          ? (isRH ? "HSD" : "HSN")
-          : (isRH ? "HSD" : "HS");
+        const labelTop = night
+         ? "HSN" : (isSunday ? "HSD" : "HS");
         return (
           <g key={`top-${i}`}>
             {tick(x2, Y1, fmt(e))}
-            {segAcronym(x1, x2, Y1, label, night)}
+            {segAcronym(x1, x2, Y1, labelTop, night)}
           </g>
         );
       })}
@@ -576,13 +575,12 @@ function FriseTimeline(props: {
             const x1 = PADL + i * hourW;
             const x2 = PADL + (i + 1) * hourW;
             const night = isFullNightHour(s, e);
-            const label = night
-              ? (isRH ? "HSDM" : "HSNM")
-              : (isRH ? "HSDM" : "HSM");
+            const labelBot = night
+             ? "HSNM" : (isSunday ? "HSDM : "HSM";
             return (
               <g key={`bot-${i}`}>
                 {tick(x2, Y2, fmt(e))}
-                {segAcronym(x1, x2, Y2, label, night)}
+                {segAcronym(x1, x2, Y2, labelBot, night)}
               </g>
             );
           })}
