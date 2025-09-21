@@ -574,9 +574,10 @@ function FriseTimeline(props: {
             const e = new Date(s.getTime() + 3600000);
             const x1 = PADL + i * hourW;
             const x2 = PADL + (i + 1) * hourW;
-            const night = isFullNightHour(s, e);
-            const labelBot = night
-             ? "HSNM" : (isSunday ? "HSDM : "HSM");
+           const night = isFullNightHour(s, e);
+           const labelBot = night
+           ? "HSNM"
+           : (isSunday ? "HSDM" : "HSM");
             return (
               <g key={`bot-${i}`}>
                 {tick(x2, Y2, fmt(e))}
