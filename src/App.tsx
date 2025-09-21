@@ -459,7 +459,7 @@ export default function App() {
 function FriseTimeline(props: { /* ... */ }) {
    // Force des entiers non négatifs
    const nTop = Math.max(0, Math.floor(props.nonMajhours));
-   const nBot = Math.max(0, Math.floor(props.majHours)),
+   const nBot = Math.max(0, Math.floor(props.majHours));
 
       const hourW = 56;
    const lineLenTop = Math.max(1, nTop) * hourW;
