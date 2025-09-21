@@ -381,7 +381,7 @@ export default function App() {
       <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
         {/* HS non majorées (base) */}
         {out.HS  > 0 && (<><div>{out.HS} {dayType === "RH" ? "HSD" : "HS"}</div><div /></>)}
-
+       {out.HSN > 0 && (<><div>{out.HSN} HSN</div><div /></>)}
         {/* Lignes "à majorer" (une seule ligne par type) */}
         {(() => {
           const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
@@ -402,7 +402,7 @@ export default function App() {
       <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
         {/* Non majorées rendues telles quelles */}
         {out.HS  > 0 && (<><div>{out.HS} {dayType === "RH" ? "HSD" : "HS"}</div><div /></>)}
-
+         {out.HSN > 0 && (<><div>{out.HSN} HSN</div><div /></>)}
         {/* Crédits majorés (après application du facteur) */}
         {(() => {
           const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
