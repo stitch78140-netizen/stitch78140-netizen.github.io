@@ -120,7 +120,7 @@ export function compute(input: Input): Output {
                     .reduce((acc,s)=> acc + minutesBetween(s.start,s.end), 0);
 
   // Arrondis / arbitrage (minutes seules)
-  const A_hours   = (Amin_min % 60) > (Bmin_min % 60) ? Math.ceil(Amin_min/60) : Math.floor(Amin_min/60);
+  const A_hours   = (Amin_min % 60) >= (Bmin_min % 60) ? Math.ceil(Amin_min/60) : Math.floor(Amin_min/60);
   const B_total_h = ceilH(Bmin_min);
 
   // Découpage en “bacs” (heures pleines)
