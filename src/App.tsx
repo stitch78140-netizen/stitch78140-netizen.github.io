@@ -414,7 +414,7 @@ export default function App() {
   );
 } // <-- close App component here
 
-/* ============ Frise chronologique : acronymes ENTRE les traits ============ */
+/* ============ Frise chronologique corrigée ============ */
 function FriseTimeline(props: {
   start: Date; dmj: Date; t13: Date; end: Date;
   nonMajHours: number; majHours: number; dayType: DayType;
@@ -422,39 +422,32 @@ function FriseTimeline(props: {
   const hm = (d: Date) => `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
   const minOfDay = (d: Date) => d.getHours()*60 + d.getMinutes();
 
-  // "Heure entièrement de nuit" = l'intervalle [s, s+1h) est contenu dans 21:00–24:00 ou 00:00–06:00
   function fullNightHour(s: Date): boolean {
     const m = minOfDay(s);
     const mEnd = (m + 60) % (24*60);
     const crossesMidnight = m + 60 >= 24*60;
-    // cas 1 : départ entre 21:00 et 23:59 → toujours nuit
     if (m >= 21*60) return true;
-    // cas 2 : départ entre 00:00 et <06:00 et fin <06:00 → nuit
     if (m < 6*60 && (!crossesMidnight) && mEnd <= 6*60) return true;
-    // cas 3 : départ 23:xx → fin 00:xx (<06:00) → nuit (déjà couvert par cas1)
-    // sinon pas nuit complète
     return false;
   }
 
   const DAY_NON_MAJ = props.dayType === "RH" ? "HSD" : "HS";
   const DAY_MAJ     = props.dayType === "RH" ? "HDM" : "HSM";
 
-  // mise en page
   const PADL = 90, PADR = 16;
   const hourW = 56;
   const lenTop = Math.max(1, props.nonMajHours) * hourW;
   const lenBot = Math.max(1, props.majHours) * hourW;
 
   const HEADER_H = 24;
-  const TOP_H    = 84;                         // un peu plus haut pour placer l’acronyme entre les traits
+  const TOP_H    = 84;
   const BOT_H    = props.majHours > 0 ? 104 : 0;
   const totalW   = Math.max(PADL + PADR + lenTop, PADL + PADR + lenBot, 440);
   const totalH   = HEADER_H + TOP_H + BOT_H;
 
-  const Y1 = HEADER_H + 32;                   // y ligne 1
+  const Y1 = HEADER_H + 32;
   const Y2 = props.majHours > 0 ? HEADER_H + TOP_H + 32 : 0;
 
-  // petit helper : dessine un trait vertical + heure sous le trait (couleur neutre pour éviter la confusion)
   function tick(x: number, y: number, t: Date, labelAbove?: string) {
     return (
       <g>
@@ -465,39 +458,40 @@ function FriseTimeline(props: {
     );
   }
 
-  // acronyme centré entre deux traits
   function acrBetween(x1: number, x2: number, y: number, tStart: Date, dayAcr: string, nightAcr: string) {
     const isNight = fullNightHour(tStart);
     const acr = isNight ? nightAcr : dayAcr;
     const color = isNight ? "#dc2626" : "#111827";
     const xm = (x1 + x2) / 2;
-    return <text x={xm} y={y+38} textAnchor="middle" fontSize="12" fontWeight="600" fill={color}>{acr}</text>;
+    return <text x={xm} y={y+28} textAnchor="middle" fontSize="12" fontWeight="600" fill={color}>{acr}</text>;
   }
 
   return (
     <svg width="100%" height={totalH} viewBox={`0 0 ${totalW} ${totalH}`}>
-      <text x={PADL} y={16} fontSize="13" fontWeight="600" fill="#111827">Répartition</text>
+      {/* Titre centré */}
+      <text x={totalW/2} y={16} fontSize="13" fontWeight="600" fill="#111827" textAnchor="middle">
+        RÉPARTITION DES HEURES
+      </text>
 
-      {/* ===== Ligne 1 : HS/HSN depuis DMJ ===== */}
-      {/* base */}
+      {/* Ligne 1 */}
       <line x1={PADL} y1={Y1} x2={PADL + lenTop} y2={Y1} stroke="#9ca3af" strokeWidth="2" />
-      {/* Pds vers DMJ (pointillés) */}
       <line x1={PADL-48} y1={Y1} x2={PADL} y2={Y1} stroke="#9ca3af" strokeDasharray="4 4" />
       {tick(PADL-48, Y1, props.start, "Pds")}
       {tick(PADL,    Y1, props.dmj,   "DMJ")}
-      {/* heures distribuées : traits + acronyme ENTRE les traits */}
       {Array.from({ length: props.nonMajHours }).map((_, i) => {
         const s = new Date(props.dmj.getTime() + i*3600000);
         const x1 = PADL + i*hourW;
         const x2 = PADL + (i+1)*hourW;
-        // trait de l’heure suivante
         const tNext = new Date(s.getTime() + 3600000);
-        const tickEl = tick(x2, Y1, tNext, undefined);
-        const acrEl  = acrBetween(x1, x2, Y1, s, DAY_NON_MAJ, "HSN");
-        return <g key={`nm-${i}`}>{tickEl}{acrEl}</g>;
+        return (
+          <g key={`nm-${i}`}>
+            {tick(x2, Y1, tNext)}
+            {acrBetween(x1, x2, Y1, s, DAY_NON_MAJ, "HSN")}
+          </g>
+        );
       })}
 
-      {/* ===== Ligne 2 : HSM/HNM (ou HDM/HNM) depuis Amplitude ===== */}
+      {/* Ligne 2 */}
       {props.majHours > 0 && (
         <>
           <line x1={PADL} y1={Y2} x2={PADL + lenBot} y2={Y2} stroke="#9ca3af" strokeWidth="2" />
@@ -507,9 +501,12 @@ function FriseTimeline(props: {
             const x1 = PADL + i*hourW;
             const x2 = PADL + (i+1)*hourW;
             const tNext = new Date(s.getTime() + 3600000);
-            const tickEl = tick(x2, Y2, tNext, undefined);
-            const acrEl  = acrBetween(x1, x2, Y2, s, DAY_MAJ, "HNM");
-            return <g key={`m-${i}`}>{tickEl}{acrEl}</g>;
+            return (
+              <g key={`m-${i}`}>
+                {tick(x2, Y2, tNext)}
+                {acrBetween(x1, x2, Y2, s, DAY_MAJ, "HNM")}
+              </g>
+            );
           })}
         </>
       )}
