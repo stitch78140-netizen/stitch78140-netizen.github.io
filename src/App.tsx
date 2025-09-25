@@ -165,7 +165,10 @@ export default function App() {
     ? (out.Amin_min % 60) > (out.Bmin_min % 60) ? ">" :
       (out.Amin_min % 60) < (out.Bmin_min % 60) ? "<" : "="
     : "=";
-
+// Amplitude atteinte ? (FDS >= t13)
+const amplitudeAtteinte =
+  !!(out && endDT && out.t13 && endDT.getTime() >= out.t13.getTime());
+   
   /* ============ Styles mobile-first ============ */
   const box: React.CSSProperties  = { margin: "16px auto", maxWidth: 900, padding: 16, fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
   const card: React.CSSProperties = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 };
@@ -357,20 +360,26 @@ export default function App() {
         </div>
       )}
 
-      {/* Amin / Bmin */}
-      {out && (
-        <div style={{ ...card, marginTop: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div>Amin</div>
-            <div>{Math.floor(out.Amin_min/60)} h <strong>{pad(out.Amin_min%60)}</strong></div>
-            <div>Bmin</div>
-            <div>{Math.floor(out.Bmin_min/60)} h <strong>{pad(out.Bmin_min%60)}</strong></div>
-          </div>
-          <div style={{ marginTop: 8, textAlign: "center", fontSize: 18 }}>
-            Amin {cmp} Bmin
-          </div>
+     {/* Amin / Bmin */}
+{out && (
+  <div style={{ ...card, marginTop: 12 }}>
+    {amplitudeAtteinte ? (
+      <>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div>Amin</div>
+          <div>{Math.floor(out.Amin_min/60)} h <strong>{String(out.Amin_min%60).padStart(2,"0")}</strong></div>
+          <div>Bmin</div>
+          <div>{Math.floor(out.Bmin_min/60)} h <strong>{String(out.Bmin_min%60).padStart(2,"0")}</strong></div>
         </div>
-      )}
+        <div style={{ marginTop: 8, textAlign: "center", fontSize: 18 }}>
+          Amin {cmp} Bmin
+        </div>
+      </>
+    ) : (
+      <div style={{ textAlign: "center", fontWeight: 600 }}>Amplitude non atteinte</div>
+    )}
+  </div>
+)}
        
    {/* Ventilation / Répartition */}
 {out && (
