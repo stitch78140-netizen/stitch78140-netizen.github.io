@@ -367,6 +367,7 @@ export default function App() {
       <div>{Math.floor(out.Bmin_min/60)} h <strong>{pad(out.Bmin_min%60)}</strong></div>
     </div>
 
+    {/* Règle d'affichage sous le tableau */}
     <div
       style={{
         marginTop: 8,
@@ -374,25 +375,21 @@ export default function App() {
         justifyContent: "space-between",
         alignItems: "center",
         fontSize: 18,
+        width: "100%",
       }}
     >
       {endDT!.getTime() < out.t13.getTime() ? (
-  <div style={{ opacity: 0.6 }}>Amplitude non atteinte</div>
-) : (
-  <>
-    <div>Amin {cmp} Bmin</div>
-    {(() => {
-      const aHours = out.Amin_min / 60;
-      // A < B ⇒ arrondi inférieur ; A ≥ B ⇒ arrondi supérieur
-      const A = cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
-      return <div>soit A = <strong>{A}</strong></div>;
-    })()}
-  </>
-)}
+        // Amplitude non atteinte
+        <div style={{ textAlign: "center", width: "100%", opacity: 0.6 }}>
+          Amplitude non atteinte
+        </div>
+      ) : (
+        // Amplitude atteinte : règle + valeur de A
+        <>
           <div>Amin {cmp} Bmin</div>
           {(() => {
             const aHours = out.Amin_min / 60;
-            // Règle d'arrondi : si A < B ⇒ arrondi inférieur, sinon (A ≥ B) ⇒ arrondi supérieur
+            // Si A < B → arrondi inférieur ; sinon (A ≥ B) → arrondi supérieur
             const A = cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
             return <div>soit A = <strong>{A}</strong></div>;
           })()}
@@ -401,30 +398,6 @@ export default function App() {
     </div>
   </div>
 )}
-   {/* Ventilation / Répartition */}
-{out && (
-  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-    {/* VENTILATION */}
-    <div style={{ ...card, marginTop: 12 }}>
-      <div style={{ fontWeight: 600, marginBottom: 8 }}>Ventilation des heures</div>
-      <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
-        {/* HS non majorées (base) */}
-        {out.HS  > 0 && (<><div>{out.HS} {dayType === "RH" ? "HSD" : "HS"}</div><div /></>)}
-       {out.HSN > 0 && (<><div>{out.HSN} HSN</div><div /></>)}
-        {/* Lignes "à majorer" (une seule ligne par type) */}
-        {(() => {
-          const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
-          const pct = `${factor*100}%`;
-          return (
-            <>
-              {out.HSM > 0 && (<><div>{out.HSM} HS × {pct}</div><div /></>)}
-              {out.HNM > 0 && (<><div>{out.HNM} HSN × {pct}</div><div /></>)}
-            </>
-          );
-        })()}
-      </div>
-    </div>
-
     {/* RÉPARTITION (créditée) */}
     <div style={{ ...card, marginTop: 12 }}>
       <div style={{ fontWeight: 600, marginBottom: 8 }}>Répartition des heures</div>
