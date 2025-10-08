@@ -454,8 +454,7 @@ export default function App() {
         © Stitch08
       </div>
     </div>
-  );
-} // <-- close App component here
+  )} // <-- close App component here
 
 /* ============ Frise chronologique (acronymes sur la ligne) ============ */
 function FriseTimeline(props: {
