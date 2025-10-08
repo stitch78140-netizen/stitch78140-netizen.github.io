@@ -367,7 +367,7 @@ export default function App() {
       <div>{Math.floor(out.Bmin_min / 60)} h <strong>{pad(out.Bmin_min % 60)}</strong></div>
     </div>
 
-    {/* Ligne d'analyse */}
+    {/* Ligne d'analyse (A vs B + info amplitude) */}
     <div style={{
       marginTop: 10,
       display: "flex",
@@ -375,13 +375,18 @@ export default function App() {
       alignItems: "center",
       fontSize: 18
     }}>
+      {/* à gauche : comparaison */}
       <span style={{ fontWeight: 500 }}>
         Amin {out.Amin_min < out.Bmin_min ? "<" : out.Amin_min > out.Bmin_min ? ">" : "="} Bmin
       </span>
 
-      {out.B_total_h >= 13 ? (
+      {/* à droite : A ou "Amplitude non atteinte" */}
+      {endDT && endDT >= out.t13 ? (
         (() => {
           const aHours = out.Amin_min / 60;
+          // règle d'arrondi :
+          // - si A <= B -> plancher
+          // - si A >  B -> plafond
           const Avalue = out.Amin_min > out.Bmin_min ? Math.ceil(aHours) : Math.floor(aHours);
           return <span style={{ color: "#111827", fontWeight: 600 }}>A = {Avalue}</span>;
         })()
@@ -392,7 +397,7 @@ export default function App() {
       )}
     </div>
   </div>
-)}       
+)} 
    {/* Ventilation / Répartition */}
 {out && (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
