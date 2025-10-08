@@ -362,12 +362,15 @@ export default function App() {
   <div style={{ ...card, marginTop: 12 }}>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
       <div>Amin</div>
-      <div>{Math.floor(out.Amin_min/60)} h <strong>{pad(out.Amin_min%60)}</strong></div>
+      <div>
+        {Math.floor(out.Amin_min / 60)} h <strong>{pad(out.Amin_min % 60)}</strong>
+      </div>
       <div>Bmin</div>
-      <div>{Math.floor(out.Bmin_min/60)} h <strong>{pad(out.Bmin_min%60)}</strong></div>
+      <div>
+        {Math.floor(out.Bmin_min / 60)} h <strong>{pad(out.Bmin_min % 60)}</strong>
+      </div>
     </div>
 
-    {/* Règle d'affichage sous le tableau */}
     <div
       style={{
         marginTop: 8,
@@ -375,23 +378,22 @@ export default function App() {
         justifyContent: "space-between",
         alignItems: "center",
         fontSize: 18,
-        width: "100%",
       }}
     >
       {endDT!.getTime() < out.t13.getTime() ? (
-        // Amplitude non atteinte
-        <div style={{ textAlign: "center", width: "100%", opacity: 0.6 }}>
-          Amplitude non atteinte
-        </div>
+        <div style={{ opacity: 0.6 }}>Amplitude non atteinte</div>
       ) : (
-        // Amplitude atteinte : règle + valeur de A
         <>
           <div>Amin {cmp} Bmin</div>
           {(() => {
             const aHours = out.Amin_min / 60;
-            // Si A < B → arrondi inférieur ; sinon (A ≥ B) → arrondi supérieur
+            // A < B → arrondi inférieur ; A ≥ B → arrondi supérieur
             const A = cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
-            return <div>soit A = <strong>{A}</strong></div>;
+            return (
+              <div>
+                soit A = <strong>{A}</strong>
+              </div>
+            );
           })()}
         </>
       )}
