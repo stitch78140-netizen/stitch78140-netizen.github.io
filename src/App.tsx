@@ -358,6 +358,7 @@ export default function App() {
       )}
 
     {/* Amin / Bmin */}
+</div>
 <div style={{ 
   marginTop: 8, 
   display: "flex", 
@@ -386,7 +387,7 @@ export default function App() {
       })()}
     </>
   )}
-</div>
+
    {/* Ventilation / Répartition */}
 {out && (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
