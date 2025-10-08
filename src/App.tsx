@@ -357,8 +357,6 @@ export default function App() {
         </div>
       )}
 
-    {/* Amin / Bmin */}
-
 {/* Amin / Bmin */}
 {out && (
   <div style={{ ...card, marginTop: 12 }}>
@@ -378,10 +376,19 @@ export default function App() {
         fontSize: 18,
       }}
     >
-      {out.B_total_h < 13 ? (
-        <div style={{ opacity: 0.6 }}>Amplitude non atteinte</div>
-      ) : (
-        <>
+      {endDT!.getTime() < out.t13.getTime() ? (
+  <div style={{ opacity: 0.6 }}>Amplitude non atteinte</div>
+) : (
+  <>
+    <div>Amin {cmp} Bmin</div>
+    {(() => {
+      const aHours = out.Amin_min / 60;
+      // A < B ⇒ arrondi inférieur ; A ≥ B ⇒ arrondi supérieur
+      const A = cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
+      return <div>soit A = <strong>{A}</strong></div>;
+    })()}
+  </>
+)}
           <div>Amin {cmp} Bmin</div>
           {(() => {
             const aHours = out.Amin_min / 60;
