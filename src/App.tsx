@@ -357,29 +357,17 @@ export default function App() {
         </div>
       )}
 
-{/* Amin / Bmin */}
+       {/* Amin / Bmin */}
 {out && (
   <div style={{ ...card, marginTop: 12 }}>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
       <div>Amin</div>
-      <div>
-        {Math.floor(out.Amin_min / 60)} h <strong>{pad(out.Amin_min % 60)}</strong>
-      </div>
+      <div>{Math.floor(out.Amin_min/60)} h <strong>{pad(out.Amin_min%60)}</strong></div>
       <div>Bmin</div>
-      <div>
-        {Math.floor(out.Bmin_min / 60)} h <strong>{pad(out.Bmin_min % 60)}</strong>
-      </div>
+      <div>{Math.floor(out.Bmin_min/60)} h <strong>{pad(out.Bmin_min%60)}</strong></div>
     </div>
 
-    <div
-      style={{
-        marginTop: 8,
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        fontSize: 18,
-      }}
-    >
+    <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 18 }}>
       {endDT!.getTime() < out.t13.getTime() ? (
         <div style={{ opacity: 0.6 }}>Amplitude non atteinte</div>
       ) : (
@@ -387,30 +375,54 @@ export default function App() {
           <div>Amin {cmp} Bmin</div>
           {(() => {
             const aHours = out.Amin_min / 60;
-            // A < B → arrondi inférieur ; A ≥ B → arrondi supérieur
+            // A < B → arrondi inférieur ; A ≥ B → arrondi supérieur (y compris A = B)
             const A = cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
-            return (
-              <div>
-                soit A = <strong>{A}</strong>
-              </div>
-            );
+            return <div>soit A = <strong>{A}</strong></div>;
           })()}
         </>
       )}
     </div>
   </div>
 )}
+
+{/* Ventilation / Répartition */}
+{out && (
+  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+    {/* VENTILATION */}
+    <div style={{ ...card, marginTop: 12 }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Ventilation des heures</div>
+      <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
+        {/* non majorées */}
+        {out.HS  > 0 && (<><div>{out.HS} {dayType === "RH" ? "HSD" : "HS"}</div><div /></>)}
+        {out.HSN > 0 && (<><div>{out.HSN} HSN</div><div /></>)}
+
+        {/* à majorer (une ligne par type) */}
+        {(() => {
+          const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
+          const pct = `${factor*100}%`;
+          const baseLabelDay = dayType === "RH" ? "HSD" : "HS"; // dimanche: HSD
+          return (
+            <>
+              {out.HSM > 0 && (<><div>{out.HSM} {baseLabelDay} × {pct}</div><div /></>)}
+              {out.HNM > 0 && (<><div>{out.HNM} HSN × {pct}</div><div /></>)}
+            </>
+          );
+        })()}
+      </div>
+    </div>
+
     {/* RÉPARTITION (créditée) */}
     <div style={{ ...card, marginTop: 12 }}>
       <div style={{ fontWeight: 600, marginBottom: 8 }}>Répartition des heures</div>
       <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
-        {/* Non majorées rendues telles quelles */}
+        {/* non majorées rendues telles quelles */}
         {out.HS  > 0 && (<><div>{out.HS} {dayType === "RH" ? "HSD" : "HS"}</div><div /></>)}
-         {out.HSN > 0 && (<><div>{out.HSN} HSN</div><div /></>)}
-        {/* Crédits majorés (après application du facteur) */}
+        {out.HSN > 0 && (<><div>{out.HSN} HSN</div><div /></>)}
+
+        {/* crédits après application du facteur */}
         {(() => {
           const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
-          const HSM_label = dayType === "RH" ? "HDM" : "HSM";
+          const HSM_label = dayType === "RH" ? "HSDM" : "HSM"; // dimanche: HSDM
           const fmt = (n:number) => {
             const s = (Math.round(n*2)/2).toString();
             return s.endsWith(".0") ? s.slice(0,-2) : s;
@@ -421,7 +433,7 @@ export default function App() {
           return (
             <>
               {creditedHSM > 0 && (<><div>{fmt(creditedHSM)} {HSM_label}</div><div /></>)}
-              {creditedHNM > 0 && (<><div>{fmt(creditedHNM)} HNM</div><div /></>)}
+              {creditedHNM > 0 && (<><div>{fmt(creditedHNM)} HNM</div><div /></>)}{/* HNM (pas HSNM) */}
             </>
           );
         })()}
@@ -435,7 +447,7 @@ export default function App() {
     </div>
   </div>
 )}
-
+       
             {/* --- Frise explicative --- */}
       {out && (
         <div style={{ ...card, marginTop: 12 }}>
