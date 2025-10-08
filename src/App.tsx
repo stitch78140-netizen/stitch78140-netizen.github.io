@@ -431,7 +431,7 @@ export default function App() {
           return (
             <>
               {creditedHSM > 0 && (<><div>{fmt(creditedHSM)} {HSM_label}</div><div /></>)}
-              {creditedHNM > 0 && (<><div>{fmt(creditedHNM)} HSNM</div><div /></>)}
+              {creditedHNM > 0 && (<><div>{fmt(creditedHNM)} HNM</div><div /></>)}
             </>
           );
         })()}
