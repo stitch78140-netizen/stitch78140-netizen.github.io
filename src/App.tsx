@@ -358,46 +358,35 @@ export default function App() {
       )}
 
     {/* Amin / Bmin */}
-{out && (
-  <div style={{ ...card, marginTop: 12 }}>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-      <div>Amin</div>
-      <div>{Math.floor(out.Amin_min / 60)} h <strong>{pad(out.Amin_min % 60)}</strong></div>
-      <div>Bmin</div>
-      <div>{Math.floor(out.Bmin_min / 60)} h <strong>{pad(out.Bmin_min % 60)}</strong></div>
+<div style={{ 
+  marginTop: 8, 
+  display: "flex", 
+  justifyContent: "space-between", 
+  alignItems: "center", 
+  fontSize: 18 
+}}>
+  {out.B_total_h < 13 ? (
+    <div style={{ textAlign: "center", width: "100%", opacity: 0.7 }}>
+      Amplitude non atteinte
     </div>
-
-    {/* Ligne d'analyse (A vs B + info amplitude) */}
-    <div style={{
-      marginTop: 10,
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      fontSize: 18
-    }}>
-      {/* à gauche : comparaison */}
-      <span style={{ fontWeight: 500 }}>
-        Amin {out.Amin_min < out.Bmin_min ? "<" : out.Amin_min > out.Bmin_min ? ">" : "="} Bmin
-      </span>
-
-      {/* à droite : A ou "Amplitude non atteinte" */}
-      {endDT && endDT >= out.t13 ? (
-        (() => {
-          const aHours = out.Amin_min / 60;
-          // règle d'arrondi :
-          // - si A <= B -> plancher
-          // - si A >  B -> plafond
-          const Avalue = out.Amin_min > out.Bmin_min ? Math.ceil(aHours) : Math.floor(aHours);
-          return <span style={{ color: "#111827", fontWeight: 600 }}>A = {Avalue}</span>;
-        })()
-      ) : (
-        <span style={{ color: "#9ca3af", fontStyle: "italic" }}>
-          Amplitude non atteinte
-        </span>
-      )}
-    </div>
-  </div>
-)} 
+  ) : (
+    <>
+      <div>
+        Amin {cmp} Bmin
+      </div>
+      {(() => {
+        let A_value = out.Amin_min / 60;
+        if (cmp === "<") A_value = Math.floor(A_value); // arrondi inférieur
+        else A_value = Math.ceil(A_value);              // arrondi supérieur
+        return (
+          <div>
+            soit A = <strong>{A_value}</strong>
+          </div>
+        );
+      })()}
+    </>
+  )}
+</div>
    {/* Ventilation / Répartition */}
 {out && (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
