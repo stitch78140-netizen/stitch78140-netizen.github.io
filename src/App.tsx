@@ -360,32 +360,39 @@ export default function App() {
     {/* Amin / Bmin */}
 {out && (
   <div style={{ ...card, marginTop: 12 }}>
-    {endDT && out.t13 && endDT.getTime() >= out.t13.getTime() ? (
-      <>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div>Amin</div>
-          <div>
-            {Math.floor(out.Amin_min / 60)} h{" "}
-            <strong>{String(out.Amin_min % 60).padStart(2, "0")}</strong>
-          </div>
-          <div>Bmin</div>
-          <div>
-            {Math.floor(out.Bmin_min / 60)} h{" "}
-            <strong>{String(out.Bmin_min % 60).padStart(2, "0")}</strong>
-          </div>
-        </div>
-        <div style={{ marginTop: 8, textAlign: "center", fontSize: 18 }}>
-          Amin {cmp} Bmin
-        </div>
-      </>
-    ) : (
-      <div style={{ textAlign: "center", fontWeight: 600 }}>
-        Amplitude non atteinte
-      </div>
-    )}
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+      <div>Amin</div>
+      <div>{Math.floor(out.Amin_min / 60)} h <strong>{pad(out.Amin_min % 60)}</strong></div>
+      <div>Bmin</div>
+      <div>{Math.floor(out.Bmin_min / 60)} h <strong>{pad(out.Bmin_min % 60)}</strong></div>
+    </div>
+
+    {/* Ligne d'analyse */}
+    <div style={{
+      marginTop: 10,
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      fontSize: 18
+    }}>
+      <span style={{ fontWeight: 500 }}>
+        Amin {out.Amin_min < out.Bmin_min ? "<" : out.Amin_min > out.Bmin_min ? ">" : "="} Bmin
+      </span>
+
+      {out.B_total_h >= 13 ? (
+        (() => {
+          const aHours = out.Amin_min / 60;
+          const Avalue = out.Amin_min > out.Bmin_min ? Math.ceil(aHours) : Math.floor(aHours);
+          return <span style={{ color: "#111827", fontWeight: 600 }}>A = {Avalue}</span>;
+        })()
+      ) : (
+        <span style={{ color: "#9ca3af", fontStyle: "italic" }}>
+          Amplitude non atteinte
+        </span>
+      )}
+    </div>
   </div>
-)}
-       
+)}       
    {/* Ventilation / Répartition */}
 {out && (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
