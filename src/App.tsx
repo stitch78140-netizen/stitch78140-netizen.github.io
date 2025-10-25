@@ -338,7 +338,33 @@ export default function App() {
           </div>
         </div>
 
-        {/* Coupure */}
+       
+        {/* Repas méridien */}
+        <div>
+          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Repas méridien</span>
+            <button style={btn} onClick={()=>{ setNoonDate(""); setNoonStart(""); }}>Effacer</button>
+          </div>
+          <div style={dateRow}>
+            <input style={inputBase} type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} />
+          </div>
+          <div style={timesRow1pair}>
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={noonStart}
+              onChange={e=>setNoonStart(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setNoonStart(v);
+                if (!noonDate && startDate && v) setNoonDate(startDate); // auto-date
+              }}
+            />
+            <input style={inputBase} value={plus1hLabel(noonDate, noonStart, startDate)} readOnly />
+          </div>
+        </div>
+
+          {/* Coupure */}
         <div>
           <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span>Coupure</span>
@@ -382,30 +408,6 @@ export default function App() {
   </div>
 )}
 
-        {/* Repas méridien */}
-        <div>
-          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>Repas méridien</span>
-            <button style={btn} onClick={()=>{ setNoonDate(""); setNoonStart(""); }}>Effacer</button>
-          </div>
-          <div style={dateRow}>
-            <input style={inputBase} type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} />
-          </div>
-          <div style={timesRow1pair}>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={noonStart}
-              onChange={e=>setNoonStart(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{
-                const v = finalizeHHMM(e.target.value);
-                setNoonStart(v);
-                if (!noonDate && startDate && v) setNoonDate(startDate); // auto-date
-              }}
-            />
-            <input style={inputBase} value={plus1hLabel(noonDate, noonStart, startDate)} readOnly />
-          </div>
-        </div>
 
         {/* Repas vespéral */}
         <div>
