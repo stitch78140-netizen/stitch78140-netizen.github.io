@@ -19,6 +19,11 @@ function addMinutes(d: Date, m: number) { return new Date(d.getTime() + m * 6000
 function asHM(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
 function asHMstrict(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
 
+// Format mm → "HHhMM" (utile pour afficher les durées)
+function fmtHM(min: number) {
+  return `${pad(Math.floor(min / 60))}h${pad(min % 60)}`;
+}
+
 /** Pendant la frappe : 0–4 chiffres ; ajoute ":" à partir de 3 chiffres. */
 function formatTypingHHMM(raw: string): string {
   const d = raw.replace(/[^\d]/g, "").slice(0, 4);
@@ -128,41 +133,50 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [eveDate, eveStart, startDate]);
 
-   // Avertissements simples sur la coupure (règles)
+   /* Avertissements simples sur la coupure (règles) */
 const breakRuleWarnings = useMemo(() => {
   const msgs: string[] = [];
 
+  // Il faut une vacation et une coupure saisies
   if (!startDT || !endDT) return msgs;
   if (!breakStartDT || !breakEndDT) return msgs;
 
-  // ordre
-  if (breakEndDT.getTime() <= breakStartDT.getTime()) {
-    msgs.push("Coupure : l'heure de fin est antérieure ou égale à l'heure de début.");
+  const s = breakStartDT.getTime();
+  const e = breakEndDT.getTime();
+
+  // Ordre de la coupure
+  if (e <= s) {
+    msgs.push("Coupure : l'heure de fin doit être postérieure à l'heure de début.");
     return msgs;
   }
 
-  // entre repas midi (fin) et soir (début) si les deux sont saisis
+  // Si deux repas sont saisis : la coupure doit être entre (midi+1h) et (début soir)
   if (noonStartDT && eveStartDT) {
-    const noonEnd = addMinutes(noonStartDT, 60);
-    if (breakStartDT.getTime() < noonEnd.getTime() || breakEndDT.getTime() > eveStartDT.getTime()) {
-      msgs.push("La coupure doit être comprise entre la fin du repas méridien et le début du repas vespéral.");
+    const noonEnd = addMinutes(noonStartDT, 60).getTime();
+    const eveBeg  = eveStartDT.getTime();
+    if (s < noonEnd || e > eveBeg) {
+      msgs.push("Coupure en dehors de l'intervalle autorisé (entre la fin du repas méridien et le début du repas vespéral).");
     }
   }
 
-  // 2h min et 25% max de l'amplitude
+  // Règle : 2h minimum ET 25% maximum de l'amplitude de la journée
   const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000)); // minutes
-  const max25  = Math.floor(ampMin * 0.25);
-  const minReq = 120;
+  const max25  = Math.floor(ampMin * 0.25); // plafond 25% arrondi à la minute inférieure
+  const minReq = 120; // 2h
 
-  const dur = Math.max(0, Math.round((breakEndDT.getTime() - breakStartDT.getTime()) / 60000));
+  const dur = Math.max(0, Math.round((e - s) / 60000));
 
-  if (dur < minReq) msgs.push("Durée de coupure < 2h (règle non respectée).");
+  if (dur < minReq) {
+    msgs.push("Coupure trop courte : minimum 02h00 (règle non respectée).");
+  }
+
   if (max25 < minReq) {
-    msgs.push("Amplitude trop faible : 25% < 2h (règle inapplicable).");
-  } else if (dur > max25) {
-    msgs.push(
-      `Durée de coupure > 25% de l'amplitude (max ${String(Math.floor(max25/60)).padStart(2,"0")}h${String(max25%60).padStart(2,"0")}).`
-    );
+    // cas où 25% de l’amplitude est < 2h → contrainte impossible
+    msgs.push(`Amplitude insuffisante : 25% (${fmtHM(max25)}) est inférieur au minimum requis (02h00).`);
+  }
+
+  if (dur > max25) {
+    msgs.push(`Coupure trop longue : maximum ${fmtHM(max25)} (25% de l'amplitude).`);
   }
 
   return msgs;
