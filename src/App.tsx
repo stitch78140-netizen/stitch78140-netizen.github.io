@@ -87,50 +87,6 @@ export default function App() {
   /* Type de jour (TSr) */
   const [dayType, setDayType] = useState<DayType>("SO");
 
-   /* Avertissements simples sur la coupure (règles) */
-const breakRuleWarnings = useMemo(() => {
-  const msgs: string[] = [];
-
-  // Il faut une vacation et une coupure saisies
-  if (!startDT || !endDT) return msgs;
-  if (!breakStartDT || !breakEndDT) return msgs;
-
-  // Ordre de la coupure
-  if (breakEndDT.getTime() <= breakStartDT.getTime()) {
-    msgs.push("Coupure : l'heure de fin est antérieure ou égale à l'heure de début.");
-    return msgs;
-  }
-
-  // Si deux repas sont saisis : la coupure doit être entre la fin du méridien et le début du vespéral
-  if (noonStartDT && eveStartDT) {
-    const noonEnd = addMinutes(noonStartDT, 60);
-    if (breakStartDT.getTime() < noonEnd.getTime() || breakEndDT.getTime() > eveStartDT.getTime()) {
-      msgs.push("La coupure doit être comprise entre la fin du repas méridien et le début du repas vespéral.");
-    }
-  }
-
-  // Règle 2h min et 25% max de l'amplitude de la journée (sur la même journée)
-  const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000)); // minutes
-  const max25  = Math.floor(ampMin * 0.25); // plafond 25%
-  const minReq = 120; // 2h
-
-  const dur = Math.max(0, Math.round((breakEndDT.getTime() - breakStartDT.getTime()) / 60000));
-
-  if (dur < minReq) {
-    msgs.push("Durée de coupure < 2h (règle non respectée).");
-  }
-  if (max25 < minReq) {
-    // cas limite : amplitude trop faible pour qu’un 25% atteigne 2h
-    msgs.push("Amplitude trop faible : 25% < 2h (règle inapplicable).");
-  } else if (dur > max25) {
-    msgs.push(
-      `Durée de coupure > 25% de l'amplitude (max ${String(Math.floor(max25/60)).padStart(2,"0")}h${String(max25%60).padStart(2,"0")}).`
-    );
-  }
-
-  return msgs;
-}, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, eveStartDT]);
-
   /* Constructions Date (fallback sur startDate si date locale absente) */
   const startDT = useMemo(() => {
     if (!startDate || !isValidHHMM(startTime)) return null;
@@ -324,82 +280,42 @@ const breakRuleWarnings = useMemo(() => {
           </div>
         </div>
 
-       {/* Coupure */}
-<div>
-  <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-    <span>Coupure</span>
-    <button style={btn} onClick={() => { setBreakDate(""); setBreakStartTime(""); setBreakEndTime(""); }}>Effacer</button>
-  </div>
+        {/* Coupure */}
+        <div>
+          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Coupure</span>
+            <button style={btn} onClick={()=>{ setBreakDate(""); setBreakStartTime(""); setBreakEndTime(""); }}>Effacer</button>
+          </div>
+          <div style={dateRow}>
+            <input style={inputBase} type="date" value={breakDate} onChange={e=>setBreakDate(e.target.value)} />
+          </div>
+          <div style={timesRow2}>
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={breakStartTime}
+              onChange={e=>setBreakStartTime(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setBreakStartTime(v);
+                if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
+              }}
+            />
+            <div style={sep}>–</div>
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={breakEndTime}
+              onChange={e=>setBreakEndTime(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setBreakEndTime(v);
+                if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
+              }}
+            />
+          </div>
+        </div>
 
-  <div style={dateRow}>
-    <input style={inputBase} type="date" value={breakDate} onChange={e => setBreakDate(e.target.value)} />
-  </div>
-
-  <div style={timesRow2}>
-    <input
-      style={inputBase}
-      inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-      value={breakStartTime}
-      onChange={e => setBreakStartTime(formatTypingHHMM(e.target.value))}
-      onBlur={e => {
-        const v = finalizeHHMM(e.target.value);
-        setBreakStartTime(v);
-        if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
-      }}
-    />
-    <div style={sep}>–</div>
-    <input
-      style={inputBase}
-      inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-      value={breakEndTime}
-      onChange={e => setBreakEndTime(formatTypingHHMM(e.target.value))}
-      onBlur={e => {
-        const v = finalizeHHMM(e.target.value);
-        setBreakEndTime(v);
-        if (!breakDate && startDate && v) setBreakDate(startDate); // auto-date
-      }}
-    />
-  </div>
-
-  // Avertissements simples sur la coupure (règles)
-const breakRuleWarnings = useMemo(() => {
-  const msgs: string[] = [];
-
-  if (!startDT || !endDT) return msgs;
-  if (!breakStartDT || !breakEndDT) return msgs;
-
-  // ordre
-  if (breakEndDT.getTime() <= breakStartDT.getTime()) {
-    msgs.push("Coupure : l'heure de fin est antérieure ou égale à l'heure de début.");
-    return msgs;
-  }
-
-  // entre repas midi (fin) et soir (début) si les deux sont saisis
-  if (noonStartDT && eveStartDT) {
-    const noonEnd = addMinutes(noonStartDT, 60);
-    if (breakStartDT.getTime() < noonEnd.getTime() || breakEndDT.getTime() > eveStartDT.getTime()) {
-      msgs.push("La coupure doit être comprise entre la fin du repas méridien et le début du repas vespéral.");
-    }
-  }
-
-  // 2h min et 25% max de l'amplitude
-  const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000)); // minutes
-  const max25  = Math.floor(ampMin * 0.25);
-  const minReq = 120;
-
-  const dur = Math.max(0, Math.round((breakEndDT.getTime() - breakStartDT.getTime()) / 60000));
-
-  if (dur < minReq) msgs.push("Durée de coupure < 2h (règle non respectée).");
-  if (max25 < minReq) {
-    msgs.push("Amplitude trop faible : 25% < 2h (règle inapplicable).");
-  } else if (dur > max25) {
-    msgs.push(
-      `Durée de coupure > 25% de l'amplitude (max ${String(Math.floor(max25/60)).padStart(2,"0")}h${String(max25%60).padStart(2,"0")}).`
-    );
-  }
-
-  return msgs;
-}, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, eveStartDT]);
         {/* Repas méridien */}
         <div>
           <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
