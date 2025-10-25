@@ -404,31 +404,42 @@ export default function App() {
       )}
    
 
-       {/* Amin / Bmin */}
+      {/* Amin / Bmin */}
 {out && (
   <div style={{ ...card, marginTop: 12 }}>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-      <div>Amin</div>
-      <div>{Math.floor(out.Amin_min/60)} h <strong>{pad(out.Amin_min%60)}</strong></div>
-      <div>Bmin</div>
-      <div>{Math.floor(out.Bmin_min/60)} h <strong>{pad(out.Bmin_min%60)}</strong></div>
-    </div>
+    {endDT!.getTime() < out.t13.getTime() ? (
+      // Si amplitude non atteinte → message seul
+      <div style={{ textAlign: "center", opacity: 0.7, fontSize: 16, padding: "8px 0" }}>
+        Amplitude non atteinte
+      </div>
+    ) : (
+      // Sinon, afficher les valeurs et la comparaison
+      <>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div>Amin</div>
+          <div>{Math.floor(out.Amin_min / 60)} h <strong>{pad(out.Amin_min % 60)}</strong></div>
+          <div>Bmin</div>
+          <div>{Math.floor(out.Bmin_min / 60)} h <strong>{pad(out.Bmin_min % 60)}</strong></div>
+        </div>
 
-    <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 18 }}>
-      {endDT!.getTime() < out.t13.getTime() ? (
-        <div style={{ opacity: 0.6 }}>Amplitude non atteinte</div>
-      ) : (
-        <>
+        <div
+          style={{
+            marginTop: 8,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            fontSize: 18,
+          }}
+        >
           <div>Amin {cmp} Bmin</div>
           {(() => {
             const aHours = out.Amin_min / 60;
-            // A < B → arrondi inférieur ; A ≥ B → arrondi supérieur (y compris A = B)
             const A = cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
             return <div>soit A = <strong>{A}</strong></div>;
           })()}
-        </>
-      )}
-    </div>
+        </div>
+      </>
+    )}
   </div>
 )}
 
