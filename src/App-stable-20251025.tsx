@@ -19,6 +19,11 @@ function addMinutes(d: Date, m: number) { return new Date(d.getTime() + m * 6000
 function asHM(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
 function asHMstrict(min: number) { const h = Math.floor(min/60), m = min%60; return `${pad(h)}:${pad(m)}`; }
 
+// Format mm → "HHhMM" (utile pour afficher les durées)
+function fmtHM(min: number) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return `${String(h).padStart(2, "0")}h${String(m).padStart(2, "0")}`;
+}
 /** Pendant la frappe : 0–4 chiffres ; ajoute ":" à partir de 3 chiffres. */
 function formatTypingHHMM(raw: string): string {
   const d = raw.replace(/[^\d]/g, "").slice(0, 4);
@@ -128,6 +133,59 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [eveDate, eveStart, startDate]);
 
+  const breakRuleWarnings = useMemo(() => {
+  const msgs: string[] = [];
+
+  if (!startDT || !endDT) return msgs;
+  if (!breakStartDT || !breakEndDT) return msgs;
+
+  const s = breakStartDT.getTime();
+  const e = breakEndDT.getTime();
+
+  // Vérifie ordre
+  if (e <= s) {
+    msgs.push("Coupure : l'heure de fin doit être postérieure à l'heure de début.");
+    return msgs;
+  }
+
+  // Entre repas midi (fin) et soir (début) si les deux sont saisis
+  if (noonStartDT && eveStartDT) {
+    const noonEnd = addMinutes(noonStartDT, 60).getTime();
+    const eveBeg  = eveStartDT.getTime();
+    if (s < noonEnd || e > eveBeg) {
+      msgs.push("Coupure hors intervalle autorisé (entre la fin du repas méridien et le début du repas vespéral).");
+    }
+  }
+
+  // 2h min et 25% max (plafonné à 3h15)
+  const ampMin   = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000)); // minutes
+  const max25Raw = Math.floor(ampMin * 0.25);
+  const max25    = Math.min(max25Raw, 195); // 3h15 = 195 min
+  const minReq   = 120; // 2h
+  const dur      = Math.max(0, Math.round((e - s) / 60000));
+
+  // Trop courte
+  if (dur < minReq) {
+    msgs.push("Coupure trop courte : minimum 02h00.");
+  }
+
+  // Trop faible pour appliquer la règle
+  if (max25Raw < minReq) {
+    msgs.push(`Amplitude trop faible : 25 % (${fmtHM(max25Raw)}) < 02h00 (règle inapplicable).`);
+  }
+
+  // Trop longue
+  else if (dur > max25) {
+    if (max25 < 195) {
+      msgs.push(`Coupure trop longue : maximum ${fmtHM(max25)} (25 % de l’amplitude).`);
+    } else {
+      msgs.push("Coupure trop longue : maximum 03h15.");
+    }
+  }
+
+  return msgs;
+}, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, eveStartDT]);
+   
   /* TSr (journée comptable) */
   useEffect(() => {
     if (!startDT || !endDT) return;
@@ -280,7 +338,33 @@ export default function App() {
           </div>
         </div>
 
-        {/* Coupure */}
+       
+        {/* Repas méridien */}
+        <div>
+          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Repas méridien</span>
+            <button style={btn} onClick={()=>{ setNoonDate(""); setNoonStart(""); }}>Effacer</button>
+          </div>
+          <div style={dateRow}>
+            <input style={inputBase} type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} />
+          </div>
+          <div style={timesRow1pair}>
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={noonStart}
+              onChange={e=>setNoonStart(formatTypingHHMM(e.target.value))}
+              onBlur={e=>{
+                const v = finalizeHHMM(e.target.value);
+                setNoonStart(v);
+                if (!noonDate && startDate && v) setNoonDate(startDate); // auto-date
+              }}
+            />
+            <input style={inputBase} value={plus1hLabel(noonDate, noonStart, startDate)} readOnly />
+          </div>
+        </div>
+
+          {/* Coupure */}
         <div>
           <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span>Coupure</span>
@@ -316,30 +400,14 @@ export default function App() {
           </div>
         </div>
 
-        {/* Repas méridien */}
-        <div>
-          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>Repas méridien</span>
-            <button style={btn} onClick={()=>{ setNoonDate(""); setNoonStart(""); }}>Effacer</button>
-          </div>
-          <div style={dateRow}>
-            <input style={inputBase} type="date" value={noonDate} onChange={e=>setNoonDate(e.target.value)} />
-          </div>
-          <div style={timesRow1pair}>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={noonStart}
-              onChange={e=>setNoonStart(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{
-                const v = finalizeHHMM(e.target.value);
-                setNoonStart(v);
-                if (!noonDate && startDate && v) setNoonDate(startDate); // auto-date
-              }}
-            />
-            <input style={inputBase} value={plus1hLabel(noonDate, noonStart, startDate)} readOnly />
-          </div>
-        </div>
+         {breakRuleWarnings.length > 0 && (
+  <div style={{ marginTop: 6, color: "#b91c1c", fontSize: 12 }}>
+    {breakRuleWarnings.map((m, i) => (
+      <div key={`bw-${i}`}>• {m}</div>
+    ))}
+  </div>
+)}
+
 
         {/* Repas vespéral */}
         <div>
@@ -403,12 +471,11 @@ export default function App() {
         </div>
       )}
    
-
-     {/* Amin / Bmin */}
+{/* Amin / Bmin */}
 {out && (
   <div style={{ ...card, marginTop: 12 }}>
     {endDT!.getTime() < out.t13.getTime() ? (
-      // Si amplitude non atteinte → message seul
+      // Amplitude non atteinte → message seul
       <div
         style={{
           textAlign: "center",
@@ -420,7 +487,7 @@ export default function App() {
         Amplitude non atteinte
       </div>
     ) : (
-      // Sinon, afficher les valeurs et la comparaison
+      // Amplitude atteinte → valeurs + comparaison centrée
       <>
         <div
           style={{
@@ -441,35 +508,42 @@ export default function App() {
           </div>
         </div>
 
-        {/* Ligne centrée : Amin {cmp} Bmin → soit A = X */}
-        <div
-          style={{
-            marginTop: 8,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 14,
-            fontSize: 18,
-            textAlign: "center",
-          }}
-        >
-          <span style={{ whiteSpace: "nowrap" }}>Amin {cmp} Bmin</span>
-          {(() => {
-            const aHours = out.Amin_min / 60;
-            const A =
-              cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
-            return (
+        {/* Ligne centrée : Amin {cmp} Bmin → soit A = X (toujours affichée) */}
+        {(() => {
+          // comparaison minutes (règle métier existante)
+          const cmp =
+            (out.Amin_min % 60) > (out.Bmin_min % 60) ? ">" :
+            (out.Amin_min % 60) < (out.Bmin_min % 60) ? "<" : "=";
+
+          // A = arrondi inférieur si A<B, sinon arrondi supérieur (y compris A=B)
+          const aHours = out.Amin_min / 60;
+          const A = cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
+
+          return (
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 14,
+                fontSize: 18,
+                textAlign: "center",
+              }}
+            >
+              <span style={{ whiteSpace: "nowrap" }}>
+                Amin {cmp} Bmin
+              </span>
               <span style={{ whiteSpace: "nowrap" }}>
                 soit A = <strong>{A}</strong>
               </span>
-            );
-          })()}
-        </div>
+            </div>
+          );
+        })()}
       </>
     )}
   </div>
 )}
-
 {/* Ventilation / Répartition */}
 {out && (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -548,13 +622,19 @@ export default function App() {
         </div>
       )}
 
-      {/* footer */}
-      <div style={{ opacity:0.6, fontSize:12, textAlign:"center", marginTop:16 }}>
-        © Stitch08
+       {/* footer */}
+      <div style={{ textAlign: "center", fontSize: 12, marginTop: 16 }}>
+        © {new Date().getFullYear()} —{" "}
+        <span style={{ fontWeight: 600 }}>
+          <span style={{ color: "#2563eb" }}>DRJ</span>
+          <span style={{ color: "#6b7280" }}>_</span>
+          <span style={{ color: "#ef4444" }}>SG08</span>
+        </span>
       </div>
+
     </div>
-  );
-} // <-- close App component here
+  ); // <-- ferme le return(...)
+} // <-- ferme le composant App
 /* ============ Frise chronologique (acronymes sur la ligne) ============ */
 function FriseTimeline(props: {
   start: Date;         // PDS
