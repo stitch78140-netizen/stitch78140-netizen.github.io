@@ -622,7 +622,7 @@ export default function App() {
         </div>
       )}
 
-     {/* footer */}
+    {/* footer */}
 <div style={{ textAlign: "center", fontSize: 12, marginTop: 16 }}>
   © {new Date().getFullYear()} —{" "}
   <span style={{ fontWeight: 600 }}>
@@ -631,7 +631,7 @@ export default function App() {
     <span style={{ color: "#ef4444" }}>SG08</span>
   </span>
 </div>
-     );
+       
 } // <-- close App component here
 /* ============ Frise chronologique (acronymes sur la ligne) ============ */
 function FriseTimeline(props: {
