@@ -142,13 +142,13 @@ export default function App() {
   const s = breakStartDT.getTime();
   const e = breakEndDT.getTime();
 
-  // ordre
+  // Vérifie ordre
   if (e <= s) {
     msgs.push("Coupure : l'heure de fin doit être postérieure à l'heure de début.");
     return msgs;
   }
 
-  // entre repas midi (fin) et soir (début) si les deux sont saisis
+  // Entre repas midi (fin) et soir (début) si les deux sont saisis
   if (noonStartDT && eveStartDT) {
     const noonEnd = addMinutes(noonStartDT, 60).getTime();
     const eveBeg  = eveStartDT.getTime();
@@ -158,20 +158,29 @@ export default function App() {
   }
 
   // 2h min et 25% max (plafonné à 3h15)
-  const ampMin    = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000)); // minutes
-  const max25Raw  = Math.floor(ampMin * 0.25);
-  const max25     = Math.min(max25Raw, 195); // ⟵ PLAFOND 3h15 = 195 min
-  const minReq    = 120; // 2h
-  const dur       = Math.max(0, Math.round((e - s) / 60000));
+  const ampMin   = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000)); // minutes
+  const max25Raw = Math.floor(ampMin * 0.25);
+  const max25    = Math.min(max25Raw, 195); // 3h15 = 195 min
+  const minReq   = 120; // 2h
+  const dur      = Math.max(0, Math.round((e - s) / 60000));
 
+  // Trop courte
   if (dur < minReq) {
     msgs.push("Coupure trop courte : minimum 02h00 (règle non respectée).");
   }
 
-  if (max25 < minReq) {
-    msgs.push(`Amplitude trop faible : 25% (${fmtHM(max25)}) < 02h00 (règle inapplicable).`);
-  } else if (dur > max25) {
-    msgs.push(`Coupure trop longue : maximum ${fmtHM(max25)} (25% de l'amplitude).`);
+  // Trop faible pour appliquer la règle
+  if (max25Raw < minReq) {
+    msgs.push(`Amplitude trop faible : 25 % (${fmtHM(max25Raw)}) < 02h00 (règle inapplicable).`);
+  }
+
+  // Trop longue
+  else if (dur > max25) {
+    if (max25 < 195) {
+      msgs.push(`Coupure trop longue : maximum ${fmtHM(max25)} (25 % de l’amplitude).`);
+    } else {
+      msgs.push("Coupure trop longue : maximum 03h15 (règle plafonnée).");
+    }
   }
 
   return msgs;
