@@ -128,6 +128,46 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [eveDate, eveStart, startDate]);
 
+   // Avertissements simples sur la coupure (règles)
+const breakRuleWarnings = useMemo(() => {
+  const msgs: string[] = [];
+
+  if (!startDT || !endDT) return msgs;
+  if (!breakStartDT || !breakEndDT) return msgs;
+
+  // ordre
+  if (breakEndDT.getTime() <= breakStartDT.getTime()) {
+    msgs.push("Coupure : l'heure de fin est antérieure ou égale à l'heure de début.");
+    return msgs;
+  }
+
+  // entre repas midi (fin) et soir (début) si les deux sont saisis
+  if (noonStartDT && eveStartDT) {
+    const noonEnd = addMinutes(noonStartDT, 60);
+    if (breakStartDT.getTime() < noonEnd.getTime() || breakEndDT.getTime() > eveStartDT.getTime()) {
+      msgs.push("La coupure doit être comprise entre la fin du repas méridien et le début du repas vespéral.");
+    }
+  }
+
+  // 2h min et 25% max de l'amplitude
+  const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000)); // minutes
+  const max25  = Math.floor(ampMin * 0.25);
+  const minReq = 120;
+
+  const dur = Math.max(0, Math.round((breakEndDT.getTime() - breakStartDT.getTime()) / 60000));
+
+  if (dur < minReq) msgs.push("Durée de coupure < 2h (règle non respectée).");
+  if (max25 < minReq) {
+    msgs.push("Amplitude trop faible : 25% < 2h (règle inapplicable).");
+  } else if (dur > max25) {
+    msgs.push(
+      `Durée de coupure > 25% de l'amplitude (max ${String(Math.floor(max25/60)).padStart(2,"0")}h${String(max25%60).padStart(2,"0")}).`
+    );
+  }
+
+  return msgs;
+}, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, eveStartDT]);
+   
   /* TSr (journée comptable) */
   useEffect(() => {
     if (!startDT || !endDT) return;
@@ -315,6 +355,14 @@ export default function App() {
             />
           </div>
         </div>
+
+         {breakRuleWarnings.length > 0 && (
+  <div style={{ marginTop: 6, color: "#b91c1c", fontSize: 12 }}>
+    {breakRuleWarnings.map((m, i) => (
+      <div key={`bw-${i}`}>• {m}</div>
+    ))}
+  </div>
+)}
 
         {/* Repas méridien */}
         <div>
