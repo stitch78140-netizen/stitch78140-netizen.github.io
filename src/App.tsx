@@ -622,7 +622,7 @@ export default function App() {
         </div>
       )}
 
-      {<footer style="text-align:center; font-size:12px; margin:20px 0;">
+      <footer style="text-align:center; font-size:12px; margin:20px 0;">
   © <span id="year"></span> —
   <span style="font-weight:500;">
     <span style="color:#3b82f6;">DRJ</span>
