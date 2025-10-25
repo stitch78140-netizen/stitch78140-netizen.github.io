@@ -185,19 +185,7 @@ export default function App() {
   }, [startDT, endDT, noonStartDT, eveStartDT, breakStartDT, breakEndDT]);
 
    
-         {/* Temps de travail effectif */}
-      {startDT && endDT && (
-        <div style={{ ...card, marginTop: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div>Temps de travail effectif</div>
-            <div><strong>{asHMstrict(effectiveMin)}</strong></div>
-          </div>
-          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-            Calcul : FDS − PDS − (repas &amp; coupure qui chevauchent la vacation)
-          </div>
-        </div>
-      )}
-   
+        
   /* Libellés & répartition */
   const HS_label  = dayType === "RH" ? "HSD" : "HS";
   const HSM_label = dayType === "RH" ? "HSDM" : "HSM";
@@ -401,6 +389,20 @@ export default function App() {
           </div>
         </div>
       )}
+
+        {/* Temps de travail effectif */}
+      {startDT && endDT && (
+        <div style={{ ...card, marginTop: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>Temps de travail effectif</div>
+            <div><strong>{asHMstrict(effectiveMin)}</strong></div>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+            Calcul : FDS − PDS − (repas &amp; coupure qui chevauchent la vacation)
+          </div>
+        </div>
+      )}
+   
 
        {/* Amin / Bmin */}
 {out && (
