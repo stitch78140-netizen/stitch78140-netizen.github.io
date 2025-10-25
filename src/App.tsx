@@ -153,6 +153,46 @@ export default function App() {
     });
   }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, eveStartDT, dayType]);
 
+     /* --- Temps de travail effectif (en minutes) --- */
+  const effectiveMin = useMemo(() => {
+    if (!startDT || !endDT) return 0;
+
+    // Intervalle de la vacation
+    const baseStart = startDT.getTime();
+    const baseEnd   = endDT.getTime();
+    const baseMs    = Math.max(0, baseEnd - baseStart);
+
+    // Intervalles à soustraire (repas + coupure), seulement ceux qui existent
+    const intervals: Array<[Date, Date]> = [];
+    if (noonStartDT) intervals.push([noonStartDT, addMinutes(noonStartDT, 60)]);
+    if (eveStartDT)  intervals.push([eveStartDT,  addMinutes(eveStartDT,  60)]);
+    if (breakStartDT && breakEndDT) intervals.push([breakStartDT, breakEndDT]);
+
+    // Chevauchement de chaque intervalle avec la vacation
+    let subtractMs = 0;
+    for (const [s, e] of intervals) {
+      const a = Math.max(baseStart, s.getTime());
+      const b = Math.min(baseEnd,   e.getTime());
+      if (b > a) subtractMs += (b - a);
+    }
+
+    const workedMs = Math.max(0, baseMs - subtractMs);
+    return Math.round(workedMs / 60000); // minutes
+  }, [startDT, endDT, noonStartDT, eveStartDT, breakStartDT, breakEndDT]);
+
+         {/* Temps de travail effectif */}
+      {startDT && endDT && (
+        <div style={{ ...card, marginTop: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>Temps de travail effectif</div>
+            <div><strong>{asHMstrict(effectiveMin)}</strong></div>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+            Calcul : FDS − PDS − (repas &amp; coupure qui chevauchent la vacation)
+          </div>
+        </div>
+      )}
+   
   /* Libellés & répartition */
   const HS_label  = dayType === "RH" ? "HSD" : "HS";
   const HSM_label = dayType === "RH" ? "HSDM" : "HSM";
