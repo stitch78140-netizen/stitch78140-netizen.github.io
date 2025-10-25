@@ -404,38 +404,65 @@ export default function App() {
       )}
    
 
-      {/* Amin / Bmin */}
+     {/* Amin / Bmin */}
 {out && (
   <div style={{ ...card, marginTop: 12 }}>
     {endDT!.getTime() < out.t13.getTime() ? (
       // Si amplitude non atteinte → message seul
-      <div style={{ textAlign: "center", opacity: 0.7, fontSize: 16, padding: "8px 0" }}>
+      <div
+        style={{
+          textAlign: "center",
+          opacity: 0.7,
+          fontSize: 16,
+          padding: "8px 0",
+        }}
+      >
         Amplitude non atteinte
       </div>
     ) : (
       // Sinon, afficher les valeurs et la comparaison
       <>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 10,
+          }}
+        >
           <div>Amin</div>
-          <div>{Math.floor(out.Amin_min / 60)} h <strong>{pad(out.Amin_min % 60)}</strong></div>
+          <div>
+            {Math.floor(out.Amin_min / 60)} h{" "}
+            <strong>{pad(out.Amin_min % 60)}</strong>
+          </div>
           <div>Bmin</div>
-          <div>{Math.floor(out.Bmin_min / 60)} h <strong>{pad(out.Bmin_min % 60)}</strong></div>
+          <div>
+            {Math.floor(out.Bmin_min / 60)} h{" "}
+            <strong>{pad(out.Bmin_min % 60)}</strong>
+          </div>
         </div>
 
+        {/* Ligne centrée : Amin {cmp} Bmin → soit A = X */}
         <div
           style={{
             marginTop: 8,
             display: "flex",
-            justifyContent: "space-between",
+            justifyContent: "center",
             alignItems: "center",
+            gap: 14,
             fontSize: 18,
+            textAlign: "center",
           }}
         >
-          <div>Amin {cmp} Bmin</div>
+          <span style={{ whiteSpace: "nowrap" }}>Amin {cmp} Bmin</span>
           {(() => {
             const aHours = out.Amin_min / 60;
-            const A = cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
-            return <div>soit A = <strong>{A}</strong></div>;
+            const A =
+              cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
+            return (
+              <span style={{ whiteSpace: "nowrap" }}>
+                soit A = <strong>{A}</strong>
+              </span>
+            );
           })()}
         </div>
       </>
