@@ -622,12 +622,20 @@ export default function App() {
         </div>
       )}
 
-      {/* footer */}
-      <div style={{ opacity:0.6, fontSize:12, textAlign:"center", marginTop:16 }}>
-        © DRJ_SG08
-      </div>
-    </div>
-  );
+      {<footer style="text-align:center; font-size:12px; margin:20px 0;">
+  © <span id="year"></span> —
+  <span style="font-weight:500;">
+    <span style="color:#3b82f6;">DRJ</span>
+    <span style="color:#e5e7eb;">_</span>
+    <span style="color:#ef4444;">SG08</span>
+  </span>
+</footer>
+
+<script>
+  // Affiche automatiquement l'année en cours
+  document.getElementById("year").textContent = new Date().getFullYear();
+</script>
+     
 } // <-- close App component here
 /* ============ Frise chronologique (acronymes sur la ligne) ============ */
 function FriseTimeline(props: {
