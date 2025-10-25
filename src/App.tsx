@@ -471,12 +471,11 @@ export default function App() {
         </div>
       )}
    
-
-     {/* Amin / Bmin */}
+{/* Amin / Bmin */}
 {out && (
   <div style={{ ...card, marginTop: 12 }}>
     {endDT!.getTime() < out.t13.getTime() ? (
-      // Si amplitude non atteinte → message seul
+      // Amplitude non atteinte → message seul
       <div
         style={{
           textAlign: "center",
@@ -488,7 +487,7 @@ export default function App() {
         Amplitude non atteinte
       </div>
     ) : (
-      // Sinon, afficher les valeurs et la comparaison
+      // Amplitude atteinte → valeurs + comparaison centrée
       <>
         <div
           style={{
@@ -509,35 +508,42 @@ export default function App() {
           </div>
         </div>
 
-        {/* Ligne centrée : Amin {cmp} Bmin → soit A = X */}
-        <div
-          style={{
-            marginTop: 8,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            gap: 14,
-            fontSize: 18,
-            textAlign: "center",
-          }}
-        >
-          <span style={{ whiteSpace: "nowrap" }}>Amin {cmp} Bmin</span>
-          {(() => {
-            const aHours = out.Amin_min / 60;
-            const A =
-              cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
-            return (
+        {/* Ligne centrée : Amin {cmp} Bmin → soit A = X (toujours affichée) */}
+        {(() => {
+          // comparaison minutes (règle métier existante)
+          const cmp =
+            (out.Amin_min % 60) > (out.Bmin_min % 60) ? ">" :
+            (out.Amin_min % 60) < (out.Bmin_min % 60) ? "<" : "=";
+
+          // A = arrondi inférieur si A<B, sinon arrondi supérieur (y compris A=B)
+          const aHours = out.Amin_min / 60;
+          const A = cmp === "<" ? Math.floor(aHours) : Math.ceil(aHours);
+
+          return (
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 14,
+                fontSize: 18,
+                textAlign: "center",
+              }}
+            >
+              <span style={{ whiteSpace: "nowrap" }}>
+                Amin {cmp} Bmin
+              </span>
               <span style={{ whiteSpace: "nowrap" }}>
                 soit A = <strong>{A}</strong>
               </span>
-            );
-          })()}
-        </div>
+            </div>
+          );
+        })()}
       </>
     )}
   </div>
 )}
-
 {/* Ventilation / Répartition */}
 {out && (
   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
