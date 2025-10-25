@@ -166,7 +166,7 @@ export default function App() {
 
   // Trop courte
   if (dur < minReq) {
-    msgs.push("Coupure trop courte : minimum 02h00 (règle non respectée).");
+    msgs.push("Coupure trop courte : minimum 02h00.");
   }
 
   // Trop faible pour appliquer la règle
@@ -179,7 +179,7 @@ export default function App() {
     if (max25 < 195) {
       msgs.push(`Coupure trop longue : maximum ${fmtHM(max25)} (25 % de l’amplitude).`);
     } else {
-      msgs.push("Coupure trop longue : maximum 03h15 (règle plafonnée).");
+      msgs.push("Coupure trop longue : maximum 03h15.");
     }
   }
 
