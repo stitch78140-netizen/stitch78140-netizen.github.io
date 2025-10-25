@@ -622,18 +622,18 @@ export default function App() {
         </div>
       )}
 
-    {/* footer */}
-<div style={{ textAlign: "center", fontSize: 12, marginTop: 16 }}>
-  © {new Date().getFullYear()} —{" "}
-  <span style={{ fontWeight: 600 }}>
-    <span style={{ color: "#2563eb" }}>DRJ</span>
-    <span style={{ color: "#6b7280" }}>_</span>
-    <span style={{ color: "#ef4444" }}>SG08</span>
-  </span>
-</div>
-);
-       
-} // <-- close App component here
+        {/* footer */}
+      <div style={{ textAlign: "center", fontSize: 12, marginTop: 16 }}>
+        © {new Date().getFullYear()} —{" "}
+        <span style={{ fontWeight: 600 }}>
+          <span style={{ color: "#2563eb" }}>DRJ</span>
+          <span style={{ color: "#6b7280" }}>_</span>
+          <span style={{ color: "#ef4444" }}>SG08</span>
+        </span>
+      </div>
+    </div>  {/* <-- ferme le conteneur principal ouvert tout en haut */}
+  );        {/* <-- ferme le return( ... ) */}
+}          
 /* ============ Frise chronologique (acronymes sur la ligne) ============ */
 function FriseTimeline(props: {
   start: Date;         // PDS
