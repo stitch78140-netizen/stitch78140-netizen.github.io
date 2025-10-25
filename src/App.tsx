@@ -631,6 +631,7 @@ export default function App() {
     <span style={{ color: "#ef4444" }}>SG08</span>
   </span>
 </div>
+);
        
 } // <-- close App component here
 /* ============ Frise chronologique (acronymes sur la ligne) ============ */
