@@ -624,7 +624,7 @@ export default function App() {
 
       {/* footer */}
       <div style={{ opacity:0.6, fontSize:12, textAlign:"center", marginTop:16 }}>
-        © Stitch08
+        © DRJ_SG08
       </div>
     </div>
   );
