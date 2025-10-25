@@ -622,7 +622,7 @@ export default function App() {
         </div>
       )}
 
-              {/* footer */}
+       {/* footer */}
       <div style={{ textAlign: "center", fontSize: 12, marginTop: 16 }}>
         © {new Date().getFullYear()} —{" "}
         <span style={{ fontWeight: 600 }}>
@@ -633,9 +633,8 @@ export default function App() {
       </div>
 
     </div>
-    {/* <-- ferme le conteneur principal ouvert tout en haut */}
-  );
-} /* <-- ferme le composant App */   
+  ); // <-- ferme le return(...)
+} // <-- ferme le composant App
 /* ============ Frise chronologique (acronymes sur la ligne) ============ */
 function FriseTimeline(props: {
   start: Date;         // PDS
