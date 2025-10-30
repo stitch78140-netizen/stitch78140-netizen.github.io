@@ -162,6 +162,31 @@ export default function App() {
       const [h, m] = eveEnd.split(":").map(Number);
       return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
     }
+     // 25% de l’amplitude (FDS−PDS) atteint-il 2h ?
+const breakApplicable = useMemo(() => {
+  if (!startDT || !endDT) return true; // tant que PDS/FDS pas saisies -> ne pas bloquer
+  const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000));
+  const pct25  = Math.floor(ampMin * 0.25);
+  return pct25 >= 120;
+}, [startDT, endDT]);
+
+// Libellé "max" à afficher (min(25% amplitude, 3h15))
+const breakMaxLabel = useMemo(() => {
+  if (!startDT || !endDT) return "";
+  const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000));
+  const max25  = Math.floor(ampMin * 0.25);
+  const cap    = Math.min(max25, 195); // 03h15
+  const h = String(Math.floor(cap/60)).padStart(2,"0");
+  const m = String(cap%60).padStart(2,"0");
+  return `${h}h${m}`;
+}, [startDT, endDT]);
+     useEffect(() => {
+  if (!breakApplicable) {
+    setBreakDate("");
+    setBreakStartTime("");
+    setBreakEndTime("");
+  }
+}, [breakApplicable]);
     // Fin non saisie → auto +1h
     return addMinutes(new Date(`${dISO}T${eveStart}`), 60);
   }, [eveDate, eveStart, eveEnd, startDate]);
@@ -421,41 +446,82 @@ export default function App() {
         </div>
 
         {/* Coupure */}
-        <div>
-          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>Coupure</span>
-            <button style={btn} onClick={()=>{ setBreakDate(""); setBreakStartTime(""); setBreakEndTime(""); }}>Effacer</button>
-          </div>
-          <div style={dateRow}>
-            <input style={inputBase} type="date" value={breakDate} onChange={e=>setBreakDate(e.target.value)} />
-          </div>
-          <div style={timesRow2}>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={breakStartTime}
-              onChange={e=>setBreakStartTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>clampBreakStart(e.target.value)}
-            />
-            <div style={sep}>–</div>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={breakEndTime}
-              onChange={e=>setBreakEndTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>clampBreakEnd(e.target.value)}
-            />
-          </div>
+<div>
+  <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <span>
+      Coupure{" "}
+      {breakApplicable && breakMaxLabel && (
+        <span style={{ opacity: 0.7, fontWeight: 400 }}>
+          (max {breakMaxLabel})
+        </span>
+      )}
+      {!breakApplicable && (
+        <span style={{ opacity: 0.7, fontWeight: 400 }}>
+          (25 % de l’amplitude &lt; 02h00)
+        </span>
+      )}
+    </span>
+    <button
+      style={btn}
+      onClick={() => {
+        setBreakDate("");
+        setBreakStartTime("");
+        setBreakEndTime("");
+      }}
+      disabled={!breakApplicable}
+    >
+      Effacer
+    </button>
+  </div>
 
-          {breakRuleWarnings.length > 0 && (
-            <div style={{ marginTop: 6, color: "#b91c1c", fontSize: 12 }}>
-              {breakRuleWarnings.map((m, i) => (
-                <div key={`bw-${i}`}>• {m}</div>
-              ))}
-            </div>
-          )}
-        </div>
+  <div style={dateRow}>
+    <input
+      style={inputBase}
+      type="date"
+      value={breakDate}
+      onChange={(e) => setBreakDate(e.target.value)}
+      disabled={!breakApplicable}
+    />
+  </div>
 
+  <div style={timesRow2}>
+    <input
+      style={inputBase}
+      inputMode="numeric"
+      pattern="[0-9]*"
+      placeholder={breakApplicable ? "HH:MM" : "Non applicable"}
+      maxLength={5}
+      value={breakStartTime}
+      onChange={(e) =>
+        setBreakStartTime(formatTypingHHMM(e.target.value))
+      }
+      onBlur={(e) => clampBreakStart(e.target.value)}
+      disabled={!breakApplicable}
+    />
+    <div style={sep}>–</div>
+    <input
+      style={inputBase}
+      inputMode="numeric"
+      pattern="[0-9]*"
+      placeholder={breakApplicable ? "HH:MM" : "Non applicable"}
+      maxLength={5}
+      value={breakEndTime}
+      onChange={(e) =>
+        setBreakEndTime(formatTypingHHMM(e.target.value))
+      }
+      onBlur={(e) => clampBreakEnd(e.target.value)}
+      disabled={!breakApplicable}
+    />
+  </div>
+
+  {breakApplicable && breakRuleWarnings.length > 0 && (
+    <div style={{ marginTop: 6, color: "#b91c1c", fontSize: 12 }}>
+      {breakRuleWarnings.map((m, i) => (
+        <div key={`bw-${i}`}>• {m}</div>
+      ))}
+    </div>
+  )}
+</div>
         {/* Repas vespéral */}
         <div>
           <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
