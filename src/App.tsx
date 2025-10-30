@@ -154,13 +154,6 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [eveDate, eveStart, startDate]);
 
-  const eveEndDT = useMemo(() => {
-    const dISO = eveDate || startDate;
-    if (!dISO || !isValidHHMM(eveStart)) return null; // besoin du début
-    if (isValidHHMM(eveEnd)) {
-      const [h, m] = eveEnd.split(":").map(Number);
-      return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
-    }
      // 25% de l’amplitude (FDS−PDS) atteint-il 2h ?
 const breakApplicable = useMemo(() => {
   if (!startDT || !endDT) return true; // tant que PDS/FDS pas saisies -> ne pas bloquer
