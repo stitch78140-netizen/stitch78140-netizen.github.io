@@ -138,6 +138,10 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [noonDate, noonStart, startDate]);
 
+   const noonEndDT = useMemo(
+  () => (noonStartDT ? addMinutes(noonStartDT, 60) : null),
+  [noonStartDT]
+);
   const noonEndDT = useMemo(() => {                        // 👈 NEW
     const dISO = noonDate || startDate;
     if (!dISO || !isValidHHMM(noonStart)) return null;     // besoin du début
@@ -305,29 +309,27 @@ function clampBreakStart(raw: string) {
     const v = finalizeHHMM(raw);
     if (!v) { setBreakStartTime(v); return; }
 
-    // si pas de date de coupure, on prend startDate (si dispo)
     const baseISO = breakDate || startDate || "";
     if (!breakDate && startDate) setBreakDate(startDate);
 
-    // Pas de bornage si on n’a pas la fin du méridien OU pas de baseISO
-    if (!noonEndDT || !baseISO || !isValidHHMM(v)) {
+    // Pas de bornage si pas de baseISO ou pas de méridien saisi
+    if (!baseISO || !noonEndDT || !isValidHHMM(v)) {
       setBreakStartTime(v);
       return;
     }
 
     const [h, m] = v.split(":").map(Number);
-    const cand   = new Date(`${baseISO}T${pad(h)}:${pad(m)}`);
+    const cand = new Date(`${baseISO}T${pad(h)}:${pad(m)}`);
     if (isNaN(cand.getTime())) { setBreakStartTime(v); return; }
 
-    // Début coupure < fin méridien → on clippe à fin méridien
+    // Clip sous la fin du méridien
     if (cand.getTime() < noonEndDT.getTime()) {
       setBreakStartTime(`${pad(noonEndDT.getHours())}:${pad(noonEndDT.getMinutes())}`);
       return;
     }
-
     setBreakStartTime(v);
   } catch (e) {
-    console.error("clampBreakStart error", e);
+    console.error("clampBreakStart", e);
     setBreakStartTime(finalizeHHMM(raw));
   }
 }
@@ -340,25 +342,24 @@ function clampBreakEnd(raw: string) {
     const baseISO = breakDate || startDate || "";
     if (!breakDate && startDate) setBreakDate(startDate);
 
-    // Pas de bornage si on n’a pas le début du vespéral OU pas de baseISO
-    if (!eveStartDT || !baseISO || !isValidHHMM(v)) {
+    // Pas de bornage si pas de baseISO ou pas de vespéral saisi
+    if (!baseISO || !eveStartDT || !isValidHHMM(v)) {
       setBreakEndTime(v);
       return;
     }
 
     const [h, m] = v.split(":").map(Number);
-    const cand   = new Date(`${baseISO}T${pad(h)}:${pad(m)}`);
+    const cand = new Date(`${baseISO}T${pad(h)}:${pad(m)}`);
     if (isNaN(cand.getTime())) { setBreakEndTime(v); return; }
 
-    // Fin coupure > début vespéral → on clippe à début vespéral
+    // Clip au-dessus du début du vespéral
     if (cand.getTime() > eveStartDT.getTime()) {
       setBreakEndTime(`${pad(eveStartDT.getHours())}:${pad(eveStartDT.getMinutes())}`);
       return;
     }
-
     setBreakEndTime(v);
   } catch (e) {
-    console.error("clampBreakEnd error", e);
+    console.error("clampBreakEnd", e);
     setBreakEndTime(finalizeHHMM(raw));
   }
 }
