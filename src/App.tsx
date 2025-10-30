@@ -180,10 +180,6 @@ useEffect(() => {
   }
 }, [breakApplicable]);
      
-    // Fin non saisie → auto +1h
-    return addMinutes(new Date(`${dISO}T${eveStart}`), 60);
-  }, [eveDate, eveStart, eveEnd, startDate]);
-
   /* Bornage fort de la coupure : clamp sur [noonEndDT ; eveStartDT] si connus */
   function clampBreakStart(raw: string) {
     try {
