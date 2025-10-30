@@ -189,7 +189,11 @@ export default function App() {
         msgs.push("Coupure hors intervalle autorisé (entre la fin du repas méridien et le début du repas vespéral).");
       }
     }
-
+   // fin du repas méridien (si connu)
+      const noonEndDT = useMemo(
+      () => (noonStartDT ? addMinutes(noonStartDT, 60) : null),
+     [noonStartDT]
+);
     // 2h min et 25% max (plafonné à 3h15)
     const ampMin   = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000)); // minutes
     const max25Raw = Math.floor(ampMin * 0.25);
@@ -296,7 +300,48 @@ export default function App() {
     setEveDate(""); setEveStart(""); setEveEnd("");
     setDayType("SO");
   }
+function clampBreakStart(raw: string) {
+  const v = finalizeHHMM(raw);
+  if (!v) { setBreakStartTime(v); return; }
 
+  // auto-date si besoin
+  if (!breakDate && startDate) setBreakDate(startDate);
+
+  // si fin du méridien connue -> début coupure >= fin méridien
+  if (noonEndDT) {
+    const [h, m] = v.split(":").map(Number);
+    const dISO = breakDate || startDate || "";
+    if (dISO) {
+      const cand = new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+      if (cand.getTime() < noonEndDT.getTime()) {
+        setBreakStartTime(`${pad(noonEndDT.getHours())}:${pad(noonEndDT.getMinutes())}`);
+        return;
+      }
+    }
+  }
+  setBreakStartTime(v);
+}
+
+function clampBreakEnd(raw: string) {
+  const v = finalizeHHMM(raw);
+  if (!v) { setBreakEndTime(v); return; }
+
+  if (!breakDate && startDate) setBreakDate(startDate);
+
+  // si début du vespéral connu -> fin coupure <= début vespéral
+  if (eveStartDT) {
+    const [h, m] = v.split(":").map(Number);
+    const dISO = breakDate || startDate || "";
+    if (dISO) {
+      const cand = new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+      if (cand.getTime() > eveStartDT.getTime()) {
+        setBreakEndTime(`${pad(eveStartDT.getHours())}:${pad(eveStartDT.getMinutes())}`);
+        return;
+      }
+    }
+  }
+  setBreakEndTime(v);
+}
   return (
     <div style={box}>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
@@ -391,11 +436,7 @@ export default function App() {
               inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
               value={breakStartTime}
               onChange={e=>setBreakStartTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{
-                const v = finalizeHHMM(e.target.value);
-                setBreakStartTime(v);
-                if (!breakDate && startDate && v) setBreakDate(startDate);
-              }}
+              onBlur={e=>clampBreakStart(e.target.value)}
             />
             <div style={sep}>–</div>
             <input
@@ -403,11 +444,7 @@ export default function App() {
               inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
               value={breakEndTime}
               onChange={e=>setBreakEndTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>{
-                const v = finalizeHHMM(e.target.value);
-                setBreakEndTime(v);
-                if (!breakDate && startDate && v) setBreakDate(startDate);
-              }}
+              onBlur={e=>clampBreakEnd(e.target.value)}
             />
           </div>
 
