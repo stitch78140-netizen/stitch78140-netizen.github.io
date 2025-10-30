@@ -137,17 +137,16 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [noonDate, noonStart, startDate]);
 
-  const noonEndDT = useMemo(() => {
-    const dISO = noonDate || startDate;
-    if (!dISO || !isValidHHMM(noonStart)) return null; // besoin du début
-    if (isValidHHMM(noonEnd)) {
-      const [h, m] = noonEnd.split(":").map(Number);
-      return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
-    }
-    // Fin non saisie → auto +1h pour donner une fenêtre utilisable
-    return addMinutes(new Date(`${dISO}T${noonStart}`), 60);
-  }, [noonDate, noonStart, noonEnd, startDate]);
-
+  const eveEndDT = useMemo(() => {
+  const dISO = eveDate || startDate;
+  if (!dISO || !isValidHHMM(eveStart)) return null; // besoin du début
+  if (isValidHHMM(eveEnd)) {
+    const [h, m] = eveEnd.split(":").map(Number);
+    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+  }
+  // Fin non saisie → auto +1h
+  return addMinutes(new Date(`${dISO}T${eveStart}`), 60);
+}, [eveDate, eveStart, eveEnd, startDate]);
   const eveStartDT = useMemo(() => {
     const dISO = eveDate || startDate;
     if (!dISO || !isValidHHMM(eveStart)) return null;
@@ -176,17 +175,18 @@ const breakMaxLabel = useMemo(() => {
   const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000));
   const max25  = Math.floor(ampMin * 0.25);
   const cap    = Math.min(max25, 195); // 03h15
-  const h = String(Math.floor(cap/60)).padStart(2,"0");
-  const m = String(cap%60).padStart(2,"0");
-  return `${h}h${m}`;
+  return `${pad(Math.floor(cap/60))}h${pad(cap%60)}`;
 }, [startDT, endDT]);
-     useEffect(() => {
+
+// Si non applicable -> vider la coupure
+useEffect(() => {
   if (!breakApplicable) {
     setBreakDate("");
     setBreakStartTime("");
     setBreakEndTime("");
   }
 }, [breakApplicable]);
+     
     // Fin non saisie → auto +1h
     return addMinutes(new Date(`${dISO}T${eveStart}`), 60);
   }, [eveDate, eveStart, eveEnd, startDate]);
