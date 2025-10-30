@@ -1,8 +1,7 @@
 const VERSION = "stable-1";
-
 /* ===========================================
    CHECKPOINT: Frise OK — 2025-09-20
-   Base stable (UI + frise + acronymes) + repas fin éditable
+   Base stable (UI + frise + acronymes) + repas fin éditable + bornage coupure
    =========================================== */
 
 import React, { useMemo, useState, useEffect } from "react";
@@ -68,7 +67,7 @@ function plus1hLabel(dateISO: string, hhmm: string, fallbackDateISO?: string) {
   return `${pad(e.getHours())}:${pad(e.getMinutes())}`;
 }
 
-/** DMJ/Amplitude : HH:MM en gras si même jour que PDS/FDS ; sinon JJ/MM/AAAA HH:MM (heure en gras). */
+/** Libellés DMJ/Amplitude : HH:MM en gras si même jour que PDS/FDS ; sinon JJ/MM/AAAA HH:MM (heure en gras). */
 function fmtSmart(d: Date, refStart?: Date, refEnd?: Date) {
   const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const sd = refStart ? refStart.toDateString() : "";
@@ -93,18 +92,18 @@ export default function App() {
   const [breakStartTime, setBreakStartTime] = useState<string>("");
   const [breakEndTime, setBreakEndTime] = useState<string>("");
 
-  /* Repas (début + fin éditable ; auto +1h si fin vide) */
+  /* Repas (début + fin éditable ; auto +1h si fin vide au blur) */
   const [noonDate, setNoonDate] = useState<string>("");
   const [noonStart, setNoonStart] = useState<string>("");
-  const [noonEnd, setNoonEnd] = useState<string>("");          // 👈 NEW
+  const [noonEnd, setNoonEnd] = useState<string>("");
   const [eveDate, setEveDate] = useState<string>("");
   const [eveStart, setEveStart] = useState<string>("");
-  const [eveEnd, setEveEnd] = useState<string>("");            // 👈 NEW
+  const [eveEnd, setEveEnd] = useState<string>("");
 
   /* Type de jour (TSr) */
   const [dayType, setDayType] = useState<DayType>("SO");
 
-  /* Constructions Date (fallback sur startDate si date locale absente) */
+  /* Constructions Date */
   const startDT = useMemo(() => {
     if (!startDate || !isValidHHMM(startTime)) return null;
     const [h, m] = startTime.split(":").map(Number);
@@ -138,18 +137,14 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [noonDate, noonStart, startDate]);
 
-   const noonEndDT = useMemo(
-  () => (noonStartDT ? addMinutes(noonStartDT, 60) : null),
-  [noonStartDT]
-);
-  const noonEndDT = useMemo(() => {                        // 👈 NEW
+  const noonEndDT = useMemo(() => {
     const dISO = noonDate || startDate;
-    if (!dISO || !isValidHHMM(noonStart)) return null;     // besoin du début
-    // si fin fournie → on la prend ; sinon auto +60
+    if (!dISO || !isValidHHMM(noonStart)) return null; // besoin du début
     if (isValidHHMM(noonEnd)) {
       const [h, m] = noonEnd.split(":").map(Number);
       return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
     }
+    // Fin non saisie → auto +1h pour donner une fenêtre utilisable
     return addMinutes(new Date(`${dISO}T${noonStart}`), 60);
   }, [noonDate, noonStart, noonEnd, startDate]);
 
@@ -160,17 +155,70 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [eveDate, eveStart, startDate]);
 
-  const eveEndDT = useMemo(() => {                         // 👈 NEW
+  const eveEndDT = useMemo(() => {
     const dISO = eveDate || startDate;
-    if (!dISO || !isValidHHMM(eveStart)) return null;
+    if (!dISO || !isValidHHMM(eveStart)) return null; // besoin du début
     if (isValidHHMM(eveEnd)) {
       const [h, m] = eveEnd.split(":").map(Number);
       return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
     }
+    // Fin non saisie → auto +1h
     return addMinutes(new Date(`${dISO}T${eveStart}`), 60);
   }, [eveDate, eveStart, eveEnd, startDate]);
 
-  /* Règles sur la coupure */
+  /* Bornage fort de la coupure : clamp sur [noonEndDT ; eveStartDT] si connus */
+  function clampBreakStart(raw: string) {
+    try {
+      const v = finalizeHHMM(raw);
+      if (!v) { setBreakStartTime(v); return; }
+
+      const baseISO = breakDate || startDate || "";
+      if (!breakDate && startDate) setBreakDate(startDate);
+
+      if (!baseISO || !noonEndDT || !isValidHHMM(v)) {
+        setBreakStartTime(v); return;
+      }
+      const [h, m] = v.split(":").map(Number);
+      const cand = new Date(`${baseISO}T${pad(h)}:${pad(m)}`);
+      if (isNaN(cand.getTime())) { setBreakStartTime(v); return; }
+
+      if (cand.getTime() < noonEndDT.getTime()) {
+        setBreakStartTime(`${pad(noonEndDT.getHours())}:${pad(noonEndDT.getMinutes())}`);
+        return;
+      }
+      setBreakStartTime(v);
+    } catch (e) {
+      console.error("clampBreakStart", e);
+      setBreakStartTime(finalizeHHMM(raw));
+    }
+  }
+  function clampBreakEnd(raw: string) {
+    try {
+      const v = finalizeHHMM(raw);
+      if (!v) { setBreakEndTime(v); return; }
+
+      const baseISO = breakDate || startDate || "";
+      if (!breakDate && startDate) setBreakDate(startDate);
+
+      if (!baseISO || !eveStartDT || !isValidHHMM(v)) {
+        setBreakEndTime(v); return;
+      }
+      const [h, m] = v.split(":").map(Number);
+      const cand = new Date(`${baseISO}T${pad(h)}:${pad(m)}`);
+      if (isNaN(cand.getTime())) { setBreakEndTime(v); return; }
+
+      if (cand.getTime() > eveStartDT.getTime()) {
+        setBreakEndTime(`${pad(eveStartDT.getHours())}:${pad(eveStartDT.getMinutes())}`);
+        return;
+      }
+      setBreakEndTime(v);
+    } catch (e) {
+      console.error("clampBreakEnd", e);
+      setBreakEndTime(finalizeHHMM(raw));
+    }
+  }
+
+  /* Règles sur la coupure (messages) */
   const breakRuleWarnings = useMemo(() => {
     const msgs: string[] = [];
     if (!startDT || !endDT) return msgs;
@@ -185,19 +233,13 @@ export default function App() {
       return msgs;
     }
 
-    // si les deux repas saisis : coupure ∈ ]fin midi ; début soir[
-    if (noonStartDT && noonEndDT && eveStartDT) {
-      const noonEndMs = noonEndDT.getTime();
-      const eveBegMs  = eveStartDT.getTime();
-      if (s < noonEndMs || e > eveBegMs) {
-        msgs.push("Coupure hors intervalle autorisé (entre la fin du repas méridien et le début du repas vespéral).");
+    // fenêtre coupure : entre fin méridien et début vespéral (si connus)
+    if (noonEndDT && eveStartDT) {
+      if (s < noonEndDT.getTime() || e > eveStartDT.getTime()) {
+        msgs.push("La coupure doit être intégralement comprise entre la fin du repas méridien et le début du repas vespéral.");
       }
     }
-   // fin du repas méridien (si connu)
-      const noonEndDT = useMemo(
-      () => (noonStartDT ? addMinutes(noonStartDT, 60) : null),
-     [noonStartDT]
-);
+
     // 2h min et 25% max (plafonné à 3h15)
     const ampMin   = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000)); // minutes
     const max25Raw = Math.floor(ampMin * 0.25);
@@ -212,16 +254,15 @@ export default function App() {
       if (max25 < 195) msgs.push(`Coupure trop longue : maximum ${fmtHM(max25)} (25 % de l’amplitude).`);
       else msgs.push("Coupure trop longue : maximum 03h15.");
     }
-
     return msgs;
-  }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, noonEndDT, eveStartDT]);
+  }, [startDT, endDT, breakStartDT, breakEndDT, noonEndDT, eveStartDT]);
 
   /* TSr (journée comptable) */
   useEffect(() => {
     if (!startDT || !endDT) return;
     const meals: Array<{ start: Date; end: Date }> = [];
-    if (noonStartDT && noonEndDT) meals.push({ start: noonStartDT, end: noonEndDT });
-    if (eveStartDT  && eveEndDT)  meals.push({ start: eveStartDT,  end: eveEndDT  });
+    if (noonStartDT && noonEndDT && noonEndDT > noonStartDT) meals.push({ start: noonStartDT, end: noonEndDT });
+    if (eveStartDT  && eveEndDT  && eveEndDT  > eveStartDT ) meals.push({ start: eveStartDT,  end: eveEndDT  });
     const breaks = (breakStartDT && breakEndDT) ? [{ start: breakStartDT, end: breakEndDT }] : [];
     const acc = computeAccountingDate(startDT, endDT, meals, breaks);
     setDayType(dayTypeFromAccountingDate(acc));
@@ -235,8 +276,8 @@ export default function App() {
       start: startDT,
       end: endDT,
       theBreak: breakStartDT && breakEndDT ? { start: breakStartDT, end: breakEndDT } : undefined,
-      mealNoon:    (noonStartDT && noonEndDT) ? { start: noonStartDT, end: noonEndDT } : undefined,
-      mealEvening: (eveStartDT  && eveEndDT ) ? { start: eveStartDT,  end: eveEndDT  } : undefined,
+      mealNoon:    (noonStartDT && noonEndDT && noonEndDT > noonStartDT) ? { start: noonStartDT, end: noonEndDT } : undefined,
+      mealEvening: (eveStartDT  && eveEndDT  && eveEndDT  > eveStartDT ) ? { start: eveStartDT,  end: eveEndDT  } : undefined,
       dayType,
     });
   }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, dayType]);
@@ -250,8 +291,8 @@ export default function App() {
       const baseMs    = Math.max(0, baseEnd - baseStart);
 
       const intervals: Array<[Date, Date]> = [];
-      if (noonStartDT && noonEndDT) intervals.push([noonStartDT, noonEndDT]);
-      if (eveStartDT  && eveEndDT ) intervals.push([eveStartDT,  eveEndDT ]);
+      if (noonStartDT && noonEndDT && noonEndDT > noonStartDT) intervals.push([noonStartDT, noonEndDT]);
+      if (eveStartDT  && eveEndDT  && eveEndDT  > eveStartDT ) intervals.push([eveStartDT,  eveEndDT ]);
       if (breakStartDT && breakEndDT) intervals.push([breakStartDT, breakEndDT]);
 
       let subtractMs = 0;
@@ -267,14 +308,9 @@ export default function App() {
     }
   }, [startDT, endDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, breakStartDT, breakEndDT]);
 
-  /* Libellés & répartition */
+  /* Répartition pour la frise */
   const nonMaj = out ? Math.min(out.A_hours, out.B_total_h) : 0;
   const maj    = out ? Math.max(0, out.B_total_h - nonMaj) : 0;
-
-  const cmp = out
-    ? (out.Amin_min % 60) > (out.Bmin_min % 60) ? ">" :
-      (out.Amin_min % 60) < (out.Bmin_min % 60) ? "<" : "="
-    : "=";
 
   /* ============ Styles ============ */
   const box: React.CSSProperties  = { margin: "16px auto", maxWidth: 900, padding: 16, fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
@@ -304,65 +340,7 @@ export default function App() {
     setEveDate(""); setEveStart(""); setEveEnd("");
     setDayType("SO");
   }
-function clampBreakStart(raw: string) {
-  try {
-    const v = finalizeHHMM(raw);
-    if (!v) { setBreakStartTime(v); return; }
 
-    const baseISO = breakDate || startDate || "";
-    if (!breakDate && startDate) setBreakDate(startDate);
-
-    // Pas de bornage si pas de baseISO ou pas de méridien saisi
-    if (!baseISO || !noonEndDT || !isValidHHMM(v)) {
-      setBreakStartTime(v);
-      return;
-    }
-
-    const [h, m] = v.split(":").map(Number);
-    const cand = new Date(`${baseISO}T${pad(h)}:${pad(m)}`);
-    if (isNaN(cand.getTime())) { setBreakStartTime(v); return; }
-
-    // Clip sous la fin du méridien
-    if (cand.getTime() < noonEndDT.getTime()) {
-      setBreakStartTime(`${pad(noonEndDT.getHours())}:${pad(noonEndDT.getMinutes())}`);
-      return;
-    }
-    setBreakStartTime(v);
-  } catch (e) {
-    console.error("clampBreakStart", e);
-    setBreakStartTime(finalizeHHMM(raw));
-  }
-}
-
-function clampBreakEnd(raw: string) {
-  try {
-    const v = finalizeHHMM(raw);
-    if (!v) { setBreakEndTime(v); return; }
-
-    const baseISO = breakDate || startDate || "";
-    if (!breakDate && startDate) setBreakDate(startDate);
-
-    // Pas de bornage si pas de baseISO ou pas de vespéral saisi
-    if (!baseISO || !eveStartDT || !isValidHHMM(v)) {
-      setBreakEndTime(v);
-      return;
-    }
-
-    const [h, m] = v.split(":").map(Number);
-    const cand = new Date(`${baseISO}T${pad(h)}:${pad(m)}`);
-    if (isNaN(cand.getTime())) { setBreakEndTime(v); return; }
-
-    // Clip au-dessus du début du vespéral
-    if (cand.getTime() > eveStartDT.getTime()) {
-      setBreakEndTime(`${pad(eveStartDT.getHours())}:${pad(eveStartDT.getMinutes())}`);
-      return;
-    }
-    setBreakEndTime(v);
-  } catch (e) {
-    console.error("clampBreakEnd", e);
-    setBreakEndTime(finalizeHHMM(raw));
-  }
-}
   return (
     <div style={box}>
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
@@ -371,7 +349,7 @@ function clampBreakEnd(raw: string) {
 
       {/* --- Formulaire --- */}
       <div style={{ ...card, display: "grid", gap: 12 }}>
-        {/* Prise */}
+        {/* Prise de service */}
         <div>
           <div style={labelCol}>Prise de service</div>
           <div style={dateRow}>
@@ -389,7 +367,7 @@ function clampBreakEnd(raw: string) {
           </div>
         </div>
 
-        {/* Fin */}
+        {/* Fin de service */}
         <div>
           <div style={labelCol}>Fin de service</div>
           <div style={dateRow}>
@@ -583,9 +561,10 @@ function clampBreakEnd(raw: string) {
         </div>
       )}
 
-      {/* Ventilation & Répartition (inchangé) */}
+      {/* Ventilation & Répartition */}
       {out && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          {/* VENTILATION */}
           <div style={{ ...card, marginTop:12 }}>
             <div style={{ fontWeight:600, marginBottom:8 }}>Ventilation des heures</div>
             <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
@@ -605,6 +584,7 @@ function clampBreakEnd(raw: string) {
             </div>
           </div>
 
+          {/* RÉPARTITION */}
           <div style={{ ...card, marginTop:12 }}>
             <div style={{ fontWeight:600, marginBottom:8 }}>Répartition des heures</div>
             <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:6 }}>
@@ -665,13 +645,8 @@ function clampBreakEnd(raw: string) {
 
 /* ============ Frise chronologique (acronymes sur la ligne) ============ */
 function FriseTimeline(props: {
-  start: Date;         // PDS
-  dmj: Date;           // fin DMJ
-  t13: Date;           // début amplitude
-  end: Date;           // FDS (pas indispensable pour la frise)
-  nonMajHours: number; // HS/HSN/HSD (non majorées) à partir de DMJ
-  majHours: number;    // HSM/HSNM/HSDM à partir de t13 (amplitude)
-  dayType: DayType;    // pour les libellés dimanche
+  start: Date; dmj: Date; t13: Date; end: Date;
+  nonMajHours: number; majHours: number; dayType: DayType;
 }) {
   const W = 520, H = 170, PADL = 58, PADR = 16, Y1 = 62, Y2 = 132, hourW = 56;
   const isSunday = props.dayType === "RH";
