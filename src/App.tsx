@@ -137,6 +137,16 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [noonDate, noonStart, startDate]);
 
+   const noonEndDT = useMemo(() => {
+  const dISO = noonDate || startDate;
+  if (!dISO || !isValidHHMM(noonStart)) return null; // besoin du début
+  if (isValidHHMM(noonEnd)) {
+    const [h, m] = noonEnd.split(":").map(Number);
+    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+  }
+  // Fin non saisie → auto +1h
+  return addMinutes(new Date(`${dISO}T${noonStart}`), 60);
+}, [noonDate, noonStart, noonEnd, startDate]);
   const eveEndDT = useMemo(() => {
   const dISO = eveDate || startDate;
   if (!dISO || !isValidHHMM(eveStart)) return null; // besoin du début
