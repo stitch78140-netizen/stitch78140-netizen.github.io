@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Kill ALL Service Workers</title>
+<body style="font-family: system-ui; background:#111; color:#fff; text-align:center; padding:40px;">
+<h1>🧨 Purge complète des Service Workers et caches</h1>
+<p>Cette page supprime tous les SW, y compris ceux du domaine racine.</p>
+<button id="kill" style="font-size:18px; padding:10px 20px;">Lancer la purge</button>
+<pre id="log" style="text-align:left; background:#222; padding:10px; border-radius:6px; margin-top:20px;"></pre>
+
+<script>
+document.getElementById('kill').onclick = async () => {
+  const log = (m)=>{ document.getElementById('log').textContent += m + "\n"; };
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs) {
+        log('🧹 Unregister: ' + r.scope);
+        await r.unregister();
+      }
+    }
+    const keys = await caches.keys();
+    for (const k of keys) {
+      log('🗑 Delete cache: ' + k);
+      await caches.delete(k);
+    }
+    log('✅ Terminé ! Recharge dans 3 secondes...');
+    setTimeout(()=>location.reload(true), 3000);
+  } catch(e) {
+    log('❌ Erreur: ' + e);
+  }
+};
+</script>
+</body>
