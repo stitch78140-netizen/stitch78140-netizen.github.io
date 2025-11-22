@@ -829,12 +829,14 @@ export default function App() {
                   <>
                     {creditedHSM > 0 && (<><div>{fmtHours(creditedHSM)} {HSM_label}</div><div /></>)}
                     {creditedHNM > 0 && (<><div>{fmtHours(creditedHNM)} HNM</div><div /></>)}
-                    {cleaningHRMin > 0 && (
+                  {/*
+                     {cleaningHRMin > 0 && (
                       <>
                         <div>{fmtMinutes(cleaningHRMin)} HR - Nettoyage</div>
                         <div />
                       </>
                     )}
+                     */}
                   </>
                 );
               })()}
