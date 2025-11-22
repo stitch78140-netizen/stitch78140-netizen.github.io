@@ -337,20 +337,38 @@ export default function App() {
   }, [startDT, endDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, breakStartDT, breakEndDT]);
 
   /* Calcul principal (nettoyage non transmis au module de base) */
-  const out = useMemo(() => {
+    const out = useMemo(() => {
     if (!startDT || !endDT) return null;
     return compute({
       date: startDT,
       start: startDT,
       end: endDT,
-      theBreak: breakStartDT && breakEndDT ? { start: breakStartDT, end: breakEndDT } : undefined,
-      mealNoon:    (noonStartDT && noonEndDT && noonEndDT > noonStartDT) ? { start: noonStartDT, end: noonEndDT } : undefined,
-      mealEvening: (eveStartDT  && eveEndDT  && eveEndDT  > eveStartDT ) ? { start: eveStartDT,  end: eveEndDT  } : undefined,
+      theBreak: breakStartDT && breakEndDT
+        ? { start: breakStartDT, end: breakEndDT }
+        : undefined,
+      mealNoon:
+        noonStartDT && noonEndDT && noonEndDT > noonStartDT
+          ? { start: noonStartDT, end: noonEndDT }
+          : undefined,
+      mealEvening:
+        eveStartDT && eveEndDT && eveEndDT > eveStartDT
+          ? { start: eveStartDT, end: eveEndDT }
+          : undefined,
       dayType,
-    });
-  }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, dayType]);
 
-  /* HR générées par le nettoyage (affichage) */
+      // ✅ on envoie enfin le ménage au moteur
+      cleaningMinutesInside: cleaningInfo.insideMin,
+    });
+  }, [
+    startDT, endDT,
+    breakStartDT, breakEndDT,
+    noonStartDT, noonEndDT,
+    eveStartDT, eveEndDT,
+    dayType,
+    cleaningInfo.insideMin,
+  ]);
+   
+   /* HR générées par le nettoyage (affichage) */
   const cleaningHRMin = useMemo(() => {
     if (!out) return 0;
     const inside = cleaningInfo.insideMin;
