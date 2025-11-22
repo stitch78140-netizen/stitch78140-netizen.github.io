@@ -3,7 +3,6 @@ const VERSION = "stable-1";
    CHECKPOINT: Frise OK — 2025-09-20
    Base stable (UI + frise + acronymes) + repas fin éditable + bornage coupure
    + Nettoyage chambre (REM. COND. LOCAUX HEBERG.) – calcul min avant/pendant
-   + Toggle d’affichage + crédits HR nettoyage
    =========================================== */
 
 import React, { useMemo, useState, useEffect } from "react";
@@ -103,9 +102,11 @@ export default function App() {
   const [eveEnd, setEveEnd] = useState<string>("");
 
   /* Nettoyage chambre – REM. COND. LOCAUX HEBERG. (forfait 20 min) */
-  const [useCleaning, setUseCleaning] = useState<boolean>(false);
   const [cleanDate, setCleanDate] = useState<string>("");
   const [cleanStart, setCleanStart] = useState<string>("");
+
+  /* Affichage / masquage du bloc nettoyage */
+  const [cleanEnabled, setCleanEnabled] = useState<boolean>(false);
 
   /* Type de jour (TSr) */
   const [dayType, setDayType] = useState<DayType>("SO");
@@ -175,23 +176,19 @@ export default function App() {
 
   /* Nettoyage chambre : début (date+heure) → intervalle de 20 min */
   const cleanStartDT = useMemo(() => {
-    if (!useCleaning) return null;
+    if (!cleanEnabled) return null;
     const dISO = cleanDate || startDate;
     if (!dISO || !isValidHHMM(cleanStart)) return null;
     const [h, m] = cleanStart.split(":").map(Number);
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
-  }, [useCleaning, cleanDate, cleanStart, startDate]);
+  }, [cleanEnabled, cleanDate, cleanStart, startDate]);
 
-  /** Calcul des minutes de nettoyage avant / pendant le service
-   *  - total forfait = 20 minutes
-   *  - avant service : hors [PDS ; FDS]
-   *  - pendant service : partie qui tombe dans [PDS ; FDS]
-   */
+  /** Calcul des minutes de nettoyage avant / pendant le service */
   const cleaningInfo = useMemo(() => {
-    const TOTAL = 20;
-    if (!useCleaning || !cleanStartDT) return { total: 0, beforeMin: 0, insideMin: 0 };
+    const TOTAL = cleanEnabled ? 20 : 0;
+    if (!cleanEnabled || !cleanStartDT) return { total: TOTAL, beforeMin: 0, insideMin: 0 };
 
-    // Si pas de PDS/FDS, on considère tout "avant" (ne perturbe pas l'amplitude)
+    // Si pas de PDS/FDS, on considère tout "avant"
     if (!startDT || !endDT) {
       return { total: TOTAL, beforeMin: TOTAL, insideMin: 0 };
     }
@@ -209,21 +206,7 @@ export default function App() {
     }
     const before = Math.max(0, TOTAL - inside);
     return { total: TOTAL, beforeMin: before, insideMin: inside };
-  }, [useCleaning, cleanStartDT, startDT, endDT]);
-
-  // Crédit HR lié au nettoyage (partie hors service)
-  const cleaningHRMin = useMemo(
-    () => (useCleaning ? cleaningInfo.beforeMin : 0),
-    [useCleaning, cleaningInfo]
-  );
-
-  // Si on désactive le nettoyage -> on purge les champs
-  useEffect(() => {
-    if (!useCleaning) {
-      setCleanDate("");
-      setCleanStart("");
-    }
-  }, [useCleaning]);
+  }, [cleanEnabled, cleanStartDT, startDT, endDT]);
 
   // 25% de l’amplitude (FDS−PDS) atteint-il 2h ?
   const breakApplicable = useMemo(() => {
@@ -353,42 +336,33 @@ export default function App() {
     setDayType(dayTypeFromAccountingDate(acc));
   }, [startDT, endDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, breakStartDT, breakEndDT]);
 
-  /* Calcul principal – ménage transmis à compute()
-     - cleaningMinutesInside = partie du forfait 20 min faite PENDANT la vacation
-  */
+  /* Calcul principal (nettoyage non transmis au module de base) */
   const out = useMemo(() => {
     if (!startDT || !endDT) return null;
-
     return compute({
       date: startDT,
       start: startDT,
       end: endDT,
-      theBreak: breakStartDT && breakEndDT
-        ? { start: breakStartDT, end: breakEndDT }
-        : undefined,
-      mealNoon:
-        noonStartDT && noonEndDT && noonEndDT > noonStartDT
-          ? { start: noonStartDT, end: noonEndDT }
-          : undefined,
-      mealEvening:
-        eveStartDT && eveEndDT && eveEndDT > eveStartDT
-          ? { start: eveStartDT, end: eveEndDT }
-          : undefined,
+      theBreak: breakStartDT && breakEndDT ? { start: breakStartDT, end: breakEndDT } : undefined,
+      mealNoon:    (noonStartDT && noonEndDT && noonEndDT > noonStartDT) ? { start: noonStartDT, end: noonEndDT } : undefined,
+      mealEvening: (eveStartDT  && eveEndDT  && eveEndDT  > eveStartDT ) ? { start: eveStartDT,  end: eveEndDT  } : undefined,
       dayType,
-      cleaningMinutesInside: cleaningInfo.insideMin,
     });
-  }, [
-    startDT,
-    endDT,
-    breakStartDT,
-    breakEndDT,
-    noonStartDT,
-    noonEndDT,
-    eveStartDT,
-    eveEndDT,
-    dayType,
-    cleaningInfo,
-  ]);
+  }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, dayType]);
+
+  /* HR générées par le nettoyage (affichage) */
+  const cleaningHRMin = useMemo(() => {
+    if (!out) return 0;
+    const inside = cleaningInfo.insideMin;
+    if (!inside) return 0;
+
+    // minutes "offertes" par l'arrondi du dépassement
+    const extra = Math.max(0, out.B_total_h * 60 - out.Bmin_min);
+    const remaining = inside - extra;
+
+    // HR = ce qui dépasse la marge d'arrondi (mais jamais négatif)
+    return remaining > 0 ? remaining : 0;
+  }, [out, cleaningInfo]);
 
   /* --- Temps de travail effectif (en minutes) --- */
   const effectiveMin = useMemo(() => {
@@ -446,8 +420,7 @@ export default function App() {
     setBreakDate(""); setBreakStartTime(""); setBreakEndTime("");
     setNoonDate(""); setNoonStart(""); setNoonEnd("");
     setEveDate(""); setEveStart(""); setEveEnd("");
-    setUseCleaning(false);
-    setCleanDate(""); setCleanStart("");
+    setCleanDate(""); setCleanStart(""); setCleanEnabled(false);
     setDayType("SO");
   }
 
@@ -459,25 +432,25 @@ export default function App() {
 
       {/* --- Formulaire --- */}
       <div style={{ ...card, display: "grid", gap: 12 }}>
-               {/* Nettoyage chambre – REM. COND. LOCAUX HEBERG. (en début de liste, masqué par défaut) */}
-        <div>
-          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <label style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <input
-                type="checkbox"
-                checked={useCleaning}
-                onChange={(e) => setUseCleaning(e.target.checked)}
-              />
-              <span>REM. COND. LOCAUX HEBERG. (nettoyage chambre)</span>
-            </label>
-            {useCleaning && (
-              <button style={btn} onClick={() => { setCleanDate(""); setCleanStart(""); }}>
-                Effacer
-              </button>
-            )}
-          </div>
 
-          {useCleaning && (
+        {/* Nettoyage chambre – toggle + bloc */}
+        <div>
+          <label style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+            <input
+              type="checkbox"
+              checked={cleanEnabled}
+              onChange={e => {
+                const v = e.target.checked;
+                setCleanEnabled(v);
+                if (!v) { setCleanDate(""); setCleanStart(""); }
+              }}
+            />
+            <span style={{ fontWeight:500 }}>
+              REM. COND. LOCAUX HEBERG. (nettoyage chambre)
+            </span>
+          </label>
+
+          {cleanEnabled && (
             <>
               <div style={dateRow}>
                 <input
@@ -517,6 +490,7 @@ export default function App() {
             </>
           )}
         </div>
+
         {/* Prise de service */}
         <div>
           <div style={labelCol}>Prise de service</div>
@@ -738,19 +712,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Crédit HR lié au nettoyage */}
-      {cleaningHRMin > 0 && (
-        <div style={{ ...card, marginTop: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div>Crédit HR (nettoyage chambre)</div>
-            <div><strong>{asHMstrict(cleaningHRMin)}</strong></div>
-          </div>
-          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-            Forfait de 20 min de REM. COND. LOCAUX HEBERG. effectué hors vacation (ne génère pas d’HS).
-          </div>
-        </div>
-      )}
-
       {/* Amin / Bmin */}
       {out && (
         <div style={{ ...card, marginTop: 12 }}>
@@ -816,16 +777,26 @@ export default function App() {
               {(() => {
                 const factor = dayType === "SO" ? 1.5 : dayType === "R" ? 2 : 3;
                 const HSM_label = dayType === "RH" ? "HSDM" : "HSM";
-                const fmt = (n:number) => {
+                const fmtHours = (n:number) => {
                   const s = (Math.round(n*2)/2).toString();
                   return s.endsWith(".0") ? s.slice(0,-2) : s;
+                };
+                const fmtMinutes = (m:number) => {
+                  const h = Math.floor(m/60), mm = m%60;
+                  return `${pad(h)}h${pad(mm)}`;
                 };
                 const creditedHSM = out.HSM * factor;
                 const creditedHNM = out.HNM * factor;
                 return (
                   <>
-                    {creditedHSM > 0 && (<><div>{fmt(creditedHSM)} {HSM_label}</div><div /></>)}
-                    {creditedHNM > 0 && (<><div>{fmt(creditedHNM)} HNM</div><div /></>)}
+                    {creditedHSM > 0 && (<><div>{fmtHours(creditedHSM)} {HSM_label}</div><div /></>)}
+                    {creditedHNM > 0 && (<><div>{fmtHours(creditedHNM)} HNM</div><div /></>)}
+                    {cleaningHRMin > 0 && (
+                      <>
+                        <div>{fmtMinutes(cleaningHRMin)} HR - Nettoyage</div>
+                        <div />
+                      </>
+                    )}
                   </>
                 );
               })()}
