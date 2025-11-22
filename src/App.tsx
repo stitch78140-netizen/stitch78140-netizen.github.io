@@ -2,6 +2,7 @@ const VERSION = "stable-1";
 /* ===========================================
    CHECKPOINT: Frise OK — 2025-09-20
    Base stable (UI + frise + acronymes) + repas fin éditable + bornage coupure
+   + Nettoyage chambre (REM. COND. LOCAUX HEBERG.) – calcul min avant/pendant
    =========================================== */
 
 import React, { useMemo, useState, useEffect } from "react";
@@ -100,6 +101,10 @@ export default function App() {
   const [eveStart, setEveStart] = useState<string>("");
   const [eveEnd, setEveEnd] = useState<string>("");
 
+  /* Nettoyage chambre – REM. COND. LOCAUX HEBERG. (forfait 20 min) */
+  const [cleanDate, setCleanDate] = useState<string>("");
+  const [cleanStart, setCleanStart] = useState<string>("");
+
   /* Type de jour (TSr) */
   const [dayType, setDayType] = useState<DayType>("SO");
 
@@ -137,26 +142,28 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [noonDate, noonStart, startDate]);
 
-   const noonEndDT = useMemo(() => {
-  const dISO = noonDate || startDate;
-  if (!dISO || !isValidHHMM(noonStart)) return null; // besoin du début
-  if (isValidHHMM(noonEnd)) {
-    const [h, m] = noonEnd.split(":").map(Number);
-    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
-  }
-  // Fin non saisie → auto +1h
-  return addMinutes(new Date(`${dISO}T${noonStart}`), 60);
-}, [noonDate, noonStart, noonEnd, startDate]);
+  const noonEndDT = useMemo(() => {
+    const dISO = noonDate || startDate;
+    if (!dISO || !isValidHHMM(noonStart)) return null; // besoin du début
+    if (isValidHHMM(noonEnd)) {
+      const [h, m] = noonEnd.split(":").map(Number);
+      return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+    }
+    // Fin non saisie → auto +1h
+    return addMinutes(new Date(`${dISO}T${noonStart}`), 60);
+  }, [noonDate, noonStart, noonEnd, startDate]);
+
   const eveEndDT = useMemo(() => {
-  const dISO = eveDate || startDate;
-  if (!dISO || !isValidHHMM(eveStart)) return null; // besoin du début
-  if (isValidHHMM(eveEnd)) {
-    const [h, m] = eveEnd.split(":").map(Number);
-    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
-  }
-  // Fin non saisie → auto +1h
-  return addMinutes(new Date(`${dISO}T${eveStart}`), 60);
-}, [eveDate, eveStart, eveEnd, startDate]);
+    const dISO = eveDate || startDate;
+    if (!dISO || !isValidHHMM(eveStart)) return null; // besoin du début
+    if (isValidHHMM(eveEnd)) {
+      const [h, m] = eveEnd.split(":").map(Number);
+      return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+    }
+    // Fin non saisie → auto +1h
+    return addMinutes(new Date(`${dISO}T${eveStart}`), 60);
+  }, [eveDate, eveStart, eveEnd, startDate]);
+
   const eveStartDT = useMemo(() => {
     const dISO = eveDate || startDate;
     if (!dISO || !isValidHHMM(eveStart)) return null;
@@ -164,32 +171,69 @@ export default function App() {
     return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
   }, [eveDate, eveStart, startDate]);
 
-     // 25% de l’amplitude (FDS−PDS) atteint-il 2h ?
-const breakApplicable = useMemo(() => {
-  if (!startDT || !endDT) return true; // tant que PDS/FDS pas saisies -> ne pas bloquer
-  const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000));
-  const pct25  = Math.floor(ampMin * 0.25);
-  return pct25 >= 120;
-}, [startDT, endDT]);
+  /* Nettoyage chambre : début (date+heure) → intervalle de 20 min */
+  const cleanStartDT = useMemo(() => {
+    const dISO = cleanDate || startDate;
+    if (!dISO || !isValidHHMM(cleanStart)) return null;
+    const [h, m] = cleanStart.split(":").map(Number);
+    return new Date(`${dISO}T${pad(h)}:${pad(m)}`);
+  }, [cleanDate, cleanStart, startDate]);
 
-// Libellé "max" à afficher (min(25% amplitude, 3h15))
-const breakMaxLabel = useMemo(() => {
-  if (!startDT || !endDT) return "";
-  const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000));
-  const max25  = Math.floor(ampMin * 0.25);
-  const cap    = Math.min(max25, 195); // 03h15
-  return `${pad(Math.floor(cap/60))}h${pad(cap%60)}`;
-}, [startDT, endDT]);
+  /** Calcul des minutes de nettoyage avant / pendant le service
+   *  - total forfait = 20 minutes
+   *  - avant service : hors [PDS ; FDS]
+   *  - pendant service : partie qui tombe dans [PDS ; FDS]
+   */
+  const cleaningInfo = useMemo(() => {
+    const TOTAL = 20;
+    if (!cleanStartDT) return { total: 0, beforeMin: 0, insideMin: 0 };
 
-// Si non applicable -> vider la coupure
-useEffect(() => {
-  if (!breakApplicable) {
-    setBreakDate("");
-    setBreakStartTime("");
-    setBreakEndTime("");
-  }
-}, [breakApplicable]);
-     
+    // Si pas de PDS/FDS, on considère tout "avant" (ne perturbe pas l'amplitude)
+    if (!startDT || !endDT) {
+      return { total: TOTAL, beforeMin: TOTAL, insideMin: 0 };
+    }
+
+    const s = cleanStartDT.getTime();
+    const e = addMinutes(cleanStartDT, TOTAL).getTime();
+    const baseStart = startDT.getTime();
+    const baseEnd = endDT.getTime();
+
+    let inside = 0;
+    if (e > baseStart && s < baseEnd) {
+      const a = Math.max(s, baseStart);
+      const b = Math.min(e, baseEnd);
+      if (b > a) inside = Math.round((b - a) / 60000);
+    }
+    const before = Math.max(0, TOTAL - inside);
+    return { total: TOTAL, beforeMin: before, insideMin: inside };
+  }, [cleanStartDT, startDT, endDT]);
+
+  // 25% de l’amplitude (FDS−PDS) atteint-il 2h ?
+  const breakApplicable = useMemo(() => {
+    if (!startDT || !endDT) return true; // tant que PDS/FDS pas saisies -> ne pas bloquer
+    const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000));
+    const pct25  = Math.floor(ampMin * 0.25);
+    return pct25 >= 120;
+  }, [startDT, endDT]);
+
+  // Libellé "max" à afficher (min(25% amplitude, 3h15))
+  const breakMaxLabel = useMemo(() => {
+    if (!startDT || !endDT) return "";
+    const ampMin = Math.max(0, Math.round((endDT.getTime() - startDT.getTime()) / 60000));
+    const max25  = Math.floor(ampMin * 0.25);
+    const cap    = Math.min(max25, 195); // 03h15
+    return `${pad(Math.floor(cap/60))}h${pad(cap%60)}`;
+  }, [startDT, endDT]);
+
+  // Si non applicable -> vider la coupure
+  useEffect(() => {
+    if (!breakApplicable) {
+      setBreakDate("");
+      setBreakStartTime("");
+      setBreakEndTime("");
+    }
+  }, [breakApplicable]);
+
   /* Bornage fort de la coupure : clamp sur [noonEndDT ; eveStartDT] si connus */
   function clampBreakStart(raw: string) {
     try {
@@ -292,7 +336,10 @@ useEffect(() => {
     setDayType(dayTypeFromAccountingDate(acc));
   }, [startDT, endDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, breakStartDT, breakEndDT]);
 
-  /* Calcul principal */
+  /* Calcul principal
+     NOTE : pour l'instant on ne transmet pas encore le nettoyage à compute()
+     (il faudra étendre la signature côté ./modules/civils.ts)
+  */
   const out = useMemo(() => {
     if (!startDT || !endDT) return null;
     return compute({
@@ -303,8 +350,11 @@ useEffect(() => {
       mealNoon:    (noonStartDT && noonEndDT && noonEndDT > noonStartDT) ? { start: noonStartDT, end: noonEndDT } : undefined,
       mealEvening: (eveStartDT  && eveEndDT  && eveEndDT  > eveStartDT ) ? { start: eveStartDT,  end: eveEndDT  } : undefined,
       dayType,
+      // 🔜 plus tard : cleaningBefore / cleaningInside si on étend le module
+      // cleaningMinutesBefore: cleaningInfo.beforeMin,
+      // cleaningMinutesInside: cleaningInfo.insideMin,
     });
-  }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, dayType]);
+  }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, dayType /*, cleaningInfo*/]);
 
   /* --- Temps de travail effectif (en minutes) --- */
   const effectiveMin = useMemo(() => {
@@ -362,6 +412,7 @@ useEffect(() => {
     setBreakDate(""); setBreakStartTime(""); setBreakEndTime("");
     setNoonDate(""); setNoonStart(""); setNoonEnd("");
     setEveDate(""); setEveStart(""); setEveEnd("");
+    setCleanDate(""); setCleanStart("");
     setDayType("SO");
   }
 
@@ -445,82 +496,128 @@ useEffect(() => {
         </div>
 
         {/* Coupure */}
-<div>
-  <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-    <span>
-      Coupure{" "}
-      {breakApplicable && breakMaxLabel && (
-        <span style={{ opacity: 0.7, fontWeight: 400 }}>
-          (max {breakMaxLabel})
-        </span>
-      )}
-      {!breakApplicable && (
-        <span style={{ opacity: 0.7, fontWeight: 400 }}>
-          (25 % de l’amplitude &lt; 02h00)
-        </span>
-      )}
-    </span>
-    <button
-      style={btn}
-      onClick={() => {
-        setBreakDate("");
-        setBreakStartTime("");
-        setBreakEndTime("");
-      }}
-      disabled={!breakApplicable}
-    >
-      Effacer
-    </button>
-  </div>
+        <div>
+          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>
+              Coupure{" "}
+              {breakApplicable && breakMaxLabel && (
+                <span style={{ opacity: 0.7, fontWeight: 400 }}>
+                  (max {breakMaxLabel})
+                </span>
+              )}
+              {!breakApplicable && (
+                <span style={{ opacity: 0.7, fontWeight: 400 }}>
+                  (25 % de l’amplitude &lt; 02h00)
+                </span>
+              )}
+            </span>
+            <button
+              style={btn}
+              onClick={() => {
+                setBreakDate("");
+                setBreakStartTime("");
+                setBreakEndTime("");
+              }}
+              disabled={!breakApplicable}
+            >
+              Effacer
+            </button>
+          </div>
 
-  <div style={dateRow}>
-    <input
-      style={inputBase}
-      type="date"
-      value={breakDate}
-      onChange={(e) => setBreakDate(e.target.value)}
-      disabled={!breakApplicable}
-    />
-  </div>
+          <div style={dateRow}>
+            <input
+              style={inputBase}
+              type="date"
+              value={breakDate}
+              onChange={(e) => setBreakDate(e.target.value)}
+              disabled={!breakApplicable}
+            />
+          </div>
 
-  <div style={timesRow2}>
-    <input
-      style={inputBase}
-      inputMode="numeric"
-      pattern="[0-9]*"
-      placeholder={breakApplicable ? "HH:MM" : "Non applicable"}
-      maxLength={5}
-      value={breakStartTime}
-      onChange={(e) =>
-        setBreakStartTime(formatTypingHHMM(e.target.value))
-      }
-      onBlur={(e) => clampBreakStart(e.target.value)}
-      disabled={!breakApplicable}
-    />
-    <div style={sep}>–</div>
-    <input
-      style={inputBase}
-      inputMode="numeric"
-      pattern="[0-9]*"
-      placeholder={breakApplicable ? "HH:MM" : "Non applicable"}
-      maxLength={5}
-      value={breakEndTime}
-      onChange={(e) =>
-        setBreakEndTime(formatTypingHHMM(e.target.value))
-      }
-      onBlur={(e) => clampBreakEnd(e.target.value)}
-      disabled={!breakApplicable}
-    />
-  </div>
+          <div style={timesRow2}>
+            <input
+              style={inputBase}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder={breakApplicable ? "HH:MM" : "Non applicable"}
+              maxLength={5}
+              value={breakStartTime}
+              onChange={(e) =>
+                setBreakStartTime(formatTypingHHMM(e.target.value))
+              }
+              onBlur={(e) => clampBreakStart(e.target.value)}
+              disabled={!breakApplicable}
+            />
+            <div style={sep}>–</div>
+            <input
+              style={inputBase}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder={breakApplicable ? "HH:MM" : "Non applicable"}
+              maxLength={5}
+              value={breakEndTime}
+              onChange={(e) =>
+                setBreakEndTime(formatTypingHHMM(e.target.value))
+              }
+              onBlur={(e) => clampBreakEnd(e.target.value)}
+              disabled={!breakApplicable}
+            />
+          </div>
 
-  {breakApplicable && breakRuleWarnings.length > 0 && (
-    <div style={{ marginTop: 6, color: "#b91c1c", fontSize: 12 }}>
-      {breakRuleWarnings.map((m, i) => (
-        <div key={`bw-${i}`}>• {m}</div>
-      ))}
-    </div>
-  )}
-</div>
+          {breakApplicable && breakRuleWarnings.length > 0 && (
+            <div style={{ marginTop: 6, color: "#b91c1c", fontSize: 12 }}>
+              {breakRuleWarnings.map((m, i) => (
+                <div key={`bw-${i}`}>• {m}</div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Nettoyage chambre – REM. COND. LOCAUX HEBERG. */}
+        <div>
+          <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Nettoyage chambre – REM. COND. LOCAUX HEBERG.</span>
+            <button style={btn} onClick={() => { setCleanDate(""); setCleanStart(""); }}>
+              Effacer
+            </button>
+          </div>
+          <div style={dateRow}>
+            <input
+              style={inputBase}
+              type="date"
+              value={cleanDate}
+              onChange={e => setCleanDate(e.target.value)}
+            />
+          </div>
+          <div style={timesRow1pair}>
+            <input
+              style={inputBase}
+              placeholder="Début nettoyage (HH:MM)"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={5}
+              value={cleanStart}
+              onChange={e => setCleanStart(formatTypingHHMM(e.target.value))}
+              onBlur={e => setCleanStart(finalizeHHMM(e.target.value))}
+            />
+            <div style={{ fontSize: 12, opacity: 0.7, alignSelf: "center" }}>
+              Forfait <strong>20 min</strong> (ne doit pas engendrer d’HS)
+            </div>
+          </div>
+          {cleanStartDT && (
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+              <div>
+                Avant service : <strong>{cleaningInfo.beforeMin} min</strong>
+              </div>
+              {startDT && endDT && (
+                <div>
+                  Pendant service : <strong>{cleaningInfo.insideMin} min</strong>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Repas vespéral */}
         <div>
           <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
