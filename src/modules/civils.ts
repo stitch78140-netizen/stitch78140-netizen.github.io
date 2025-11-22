@@ -17,6 +17,9 @@ export interface Input {
   mealEvening?: Meal;    // repas soir (optionnel)
   theBreak?: Break;      // coupure (unique) optionnelle
   dayType: DayType;      // SO/R/RH
+
+  // 🔽 NOUVEAU : minutes de nettoyage faites PENDANT le service
+  cleaningMinutesInside?: number;
 }
 
 export interface Output {
@@ -96,52 +99,79 @@ function isFullNightHour(s: Date, e: Date){
 
 /* ---------- API principale ---------- */
 export function compute(input: Input): Output {
-  const start=input.start, end=input.end;
+  const start = input.start;
+  const end   = input.end;
 
-  // Amplitude brute = prise + 13h (indépendant des pauses)
-  const t13 = addMin(start, 13*60);
+  // 🔢 Ménage pendant service (en minutes, max 20 "neutralisées")
+  const cleaningInside = Math.max(0, Math.min(20, input.cleaningMinutesInside ?? 0));
 
-  // Pauses
-  const meals: Array<{start:Date; end:Date}>= [];
-  if(input.mealNoon)    meals.push({start: input.mealNoon.start,    end: input.mealNoon.end});
-  if(input.mealEvening) meals.push({start: input.mealEvening.start, end: input.mealEvening.end});
-  const breaks: Array<{start:Date; end:Date}>= input.theBreak ? [{start:input.theBreak.start, end:input.theBreak.end}] : [];
+  // Amplitude brute = prise + 13h
+  // ⚠️ Si du ménage est fait PENDANT le service, on repousse l’atteinte
+  // de l’amplitude de ces minutes (car ce temps est censé être hors service).
+  const t13Base = addMin(start, 13 * 60);
+  const t13     = addMin(t13Base, cleaningInside);
+
+  // Pauses (repas + coupure) — le ménage NE fait pas partie des pauses
+  const meals: Array<{ start: Date; end: Date }> = [];
+  if (input.mealNoon) {
+    meals.push({ start: input.mealNoon.start, end: input.mealNoon.end });
+  }
+  if (input.mealEvening) {
+    meals.push({ start: input.mealEvening.start, end: input.mealEvening.end });
+  }
+  const breaks: Array<{ start: Date; end: Date }> = input.theBreak
+    ? [{ start: input.theBreak.start, end: input.theBreak.end }]
+    : [];
   const allPauses = meals.concat(breaks);
 
   // DMJ repoussée par pauses/coupure seulement si elles la chevauchent
+  // ❗ Ménage ignoré ici : il ne doit PAS décaler la DMJ
   const dmjEnd = computeDMJ(start, allPauses);
 
   // Bmin = travail effectif (DMJ→fin) en minutes, pauses déduites
-  const Bmin_min = subtract(dmjEnd, end, allPauses)
-                    .reduce((acc,s)=> acc + minutesBetween(s.start,s.end), 0);
+  const Bmin_raw = subtract(dmjEnd, end, allPauses)
+    .reduce((acc, s) => acc + minutesBetween(s.start, s.end), 0);
 
-  // Amin = travail effectif entre DMJ et t13, en déduisant UNIQUEMENT la coupure
+  // ✅ Forfait ménage (max 20 min) ne doit pas générer d’HS
+  // On enlève jusqu’à 20 min correspondant au ménage fait PENDANT la vacation.
+  const Bmin_min = Math.max(0, Bmin_raw - cleaningInside);
+
+  // Amin = travail effectif entre DMJ et t13,
+  // en déduisant UNIQUEMENT la coupure
   const Amin_min = subtract(dmjEnd, t13, breaks)
-                    .reduce((acc,s)=> acc + minutesBetween(s.start,s.end), 0);
+    .reduce((acc, s) => acc + minutesBetween(s.start, s.end), 0);
 
   // Arrondis / arbitrage (minutes seules)
-  const A_hours   = (Amin_min % 60) >= (Bmin_min % 60) ? Math.ceil(Amin_min/60) : Math.floor(Amin_min/60);
+  const A_hours =
+    (Amin_min % 60) >= (Bmin_min % 60)
+      ? Math.ceil(Amin_min / 60)
+      : Math.floor(Amin_min / 60);
+
   const B_total_h = ceilH(Bmin_min);
 
   // Découpage en “bacs” (heures pleines)
   const nonMaj = Math.min(A_hours, B_total_h);
   const maj    = Math.max(0, B_total_h - nonMaj);
 
-  let HS=0, HSN=0, HSM=0, HNM=0;
+  let HS = 0, HSN = 0, HSM = 0, HNM = 0;
 
   // Non majorées : depuis DMJ
   let cur = new Date(dmjEnd);
-  for(let i=0;i<nonMaj;i++){
-    const s = new Date(cur), e = addMin(s,60);
-    if(isFullNightHour(s,e)) HSN++; else HS++;
+  for (let i = 0; i < nonMaj; i++) {
+    const s = new Date(cur);
+    const e = addMin(s, 60);
+    if (isFullNightHour(s, e)) HSN++;
+    else HS++;
     cur = e;
   }
 
-  // Majorées : depuis t13
+  // Majorées : depuis t13 (décalé par le ménage si besoin)
   cur = new Date(t13);
-  for(let i=0;i<maj;i++){
-    const s = new Date(cur), e = addMin(s,60);
-    if(isFullNightHour(s,e)) HNM++; else HSM++;
+  for (let i = 0; i < maj; i++) {
+    const s = new Date(cur);
+    const e = addMin(s, 60);
+    if (isFullNightHour(s, e)) HNM++;
+    else HSM++;
     cur = e;
   }
 
