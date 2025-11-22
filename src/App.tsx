@@ -382,6 +382,31 @@ export default function App() {
     return remaining > 0 ? remaining : 0;
   }, [out, cleaningInfo]);
 
+   const cleaningExplanation = useMemo(() => {
+  if (!cleanStartDT) return null;
+
+  // minutes dans la vacation
+  const inside = cleaningInfo.insideMin;
+  // minutes hors vacation (avant PDS)
+  const before = cleaningInfo.beforeMin;
+
+  // si pas de données ou pas d'output calculé
+  if (!out) return null;
+
+  // On compare le dépassement brut "Bmin + nettoyage" versus le B_total réellement compté
+  // Ce qui a été absorbé dans l'arrondi = inside - HR (HR déjà affichées)
+  const hrCleaning = cleaningInfo.insideMin - Math.min(cleaningInfo.insideMin, out.Bmin_min % 60);
+
+  const included = inside - hrCleaning;
+
+  if (included <= 0 && hrCleaning <= 0) return null;
+
+  return {
+    includedMin: included,
+    hrMin: hrCleaning
+  };
+}, [cleaningInfo, out, cleanStartDT]);
+
   /* --- Temps de travail effectif (en minutes) --- */
   const effectiveMin = useMemo(() => {
     if (!startDT || !endDT) return 0;
@@ -826,6 +851,23 @@ export default function App() {
           </div>
         </div>
       )}
+       {cleaningExplanation && (
+  <div style={{ marginTop: "8px", opacity: 0.8 }}>
+    <strong>🧹 Forfait nettoyage :</strong><br/>
+
+    {cleaningExplanation.includedMin > 0 && (
+      <div>
+        {formatMinutes(cleaningExplanation.includedMin)} inclus dans l’arrondi
+      </div>
+    )}
+
+    {cleaningExplanation.hrMin > 0 && (
+      <div>
+        {formatMinutes(cleaningExplanation.hrMin)} HR – Nettoyage
+      </div>
+    )}
+  </div>
+)}
 
       {/* Frise */}
       {out && (
