@@ -336,25 +336,42 @@ export default function App() {
     setDayType(dayTypeFromAccountingDate(acc));
   }, [startDT, endDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, breakStartDT, breakEndDT]);
 
-  /* Calcul principal
-     NOTE : pour l'instant on ne transmet pas encore le nettoyage à compute()
-     (il faudra étendre la signature côté ./modules/civils.ts)
+  /* Calcul principal – ici on transmet le ménage à compute()
+     - cleaningMinutesInside = partie du forfait 20 min faite PENDANT la vacation
   */
   const out = useMemo(() => {
     if (!startDT || !endDT) return null;
+
     return compute({
       date: startDT,
       start: startDT,
       end: endDT,
-      theBreak: breakStartDT && breakEndDT ? { start: breakStartDT, end: breakEndDT } : undefined,
-      mealNoon:    (noonStartDT && noonEndDT && noonEndDT > noonStartDT) ? { start: noonStartDT, end: noonEndDT } : undefined,
-      mealEvening: (eveStartDT  && eveEndDT  && eveEndDT  > eveStartDT ) ? { start: eveStartDT,  end: eveEndDT  } : undefined,
+      theBreak: breakStartDT && breakEndDT
+        ? { start: breakStartDT, end: breakEndDT }
+        : undefined,
+      mealNoon:
+        noonStartDT && noonEndDT && noonEndDT > noonStartDT
+          ? { start: noonStartDT, end: noonEndDT }
+          : undefined,
+      mealEvening:
+        eveStartDT && eveEndDT && eveEndDT > eveStartDT
+          ? { start: eveStartDT, end: eveEndDT }
+          : undefined,
       dayType,
-      // 🔜 plus tard : cleaningBefore / cleaningInside si on étend le module
-      // cleaningMinutesBefore: cleaningInfo.beforeMin,
-      // cleaningMinutesInside: cleaningInfo.insideMin,
+      cleaningMinutesInside: cleaningInfo.insideMin,   // 🔴 nouveau param transmis
     });
-  }, [startDT, endDT, breakStartDT, breakEndDT, noonStartDT, noonEndDT, eveStartDT, eveEndDT, dayType /*, cleaningInfo*/]);
+  }, [
+    startDT,
+    endDT,
+    breakStartDT,
+    breakEndDT,
+    noonStartDT,
+    noonEndDT,
+    eveStartDT,
+    eveEndDT,
+    dayType,
+    cleaningInfo, // 🔴 on ajoute cleaningInfo aux dépendances
+  ]);
 
   /* --- Temps de travail effectif (en minutes) --- */
   const effectiveMin = useMemo(() => {
@@ -388,7 +405,7 @@ export default function App() {
 
   /* ============ Styles ============ */
   const box: React.CSSProperties  = { margin: "16px auto", maxWidth: 900, padding: 16, fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
-  const card: React.CSSProperties = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 };
+  const card: React.CSSProperties = { background: "#fff", border: "1px solid "#e5e7eb", borderRadius: 12, padding: 12 };
   const btn: React.CSSProperties  = { padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" };
   const labelCol: React.CSSProperties = { fontWeight: 500, marginBottom: 6 };
   const dateRow: React.CSSProperties = { display: "block", width: "100%", marginBottom: 6 };
