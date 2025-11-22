@@ -156,24 +156,24 @@ export function compute(input: Input): Output {
   // DMJ repoussée par pauses/coupure seulement si elles la chevauchent
   const dmjEnd = computeDMJ(start, allPauses);
 
-  // Bmin = travail effectif (DMJ→fin) en minutes, pauses déduites
-  // (le ménage qui tombe après la DMJ reste inclus dans ce Bmin brut)
-  const Bmin_min = subtract(dmjEnd, end, allPauses)
+    // Bmin BRUT = travail effectif (DMJ→fin) en minutes, pauses déduites
+  const Bmin_brut = subtract(dmjEnd, end, allPauses)
     .reduce((acc,s)=> acc + minutesBetween(s.start,s.end), 0);
 
-  // On enlève le ménage pour l’ARRONDI : il ne doit pas engendrer d’HS
-  const Bmin_effective = Math.max(0, Bmin_min - cleaningInside);
+  // Bmin NET = on enlève le ménage effectué pendant service
+  // (il ne doit pas engendrer d’HS)
+  const Bmin_min = Math.max(0, Bmin_brut - cleaningInside);
 
   // Amin = travail effectif entre DMJ et t13, en déduisant UNIQUEMENT la coupure
   const Amin_min = subtract(dmjEnd, t13, breaks)
     .reduce((acc,s)=> acc + minutesBetween(s.start,s.end), 0);
 
-  // Arrondis / arbitrage (minutes seules) basés sur Bmin_effective
-  const A_hours = (Amin_min % 60) >= (Bmin_effective % 60)
+  // Arrondis / arbitrage (minutes seules) basés sur Bmin NET
+  const A_hours = (Amin_min % 60) >= (Bmin_min % 60)
     ? Math.ceil(Amin_min/60)
     : Math.floor(Amin_min/60);
 
-  const B_total_h = ceilH(Bmin_effective);
+  const B_total_h = ceilH(Bmin_min);
 
   // Découpage en “bacs” (heures pleines) à partir de ces A/B
   const nonMaj = Math.min(A_hours, B_total_h);
