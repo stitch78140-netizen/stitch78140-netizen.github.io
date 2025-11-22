@@ -406,7 +406,7 @@ export default function App() {
   /* ============ Styles ============ */
   const box: React.CSSProperties  = { margin: "16px auto", maxWidth: 900, padding: 16, fontFamily: "system-ui,-apple-system,Segoe UI,Roboto,sans-serif" };
   const card: React.CSSProperties = { background: "#fff", border: "1px solid "#e5e7eb", borderRadius: 12, padding: 12 };
-  const btn: React.CSSProperties  = { padding: "6px 10px", border: "1px solid #e5e7eb", borderRadius: 8, background: "#f8fafc" };
+  const btn: React.CSSProperties  = { padding: "6px 10px", border: "1px solid "#e5e7eb", borderRadius: 8, background: "#f8fafc" };
   const labelCol: React.CSSProperties = { fontWeight: 500, marginBottom: 6 };
   const dateRow: React.CSSProperties = { display: "block", width: "100%", marginBottom: 6 };
   const timesRow2: React.CSSProperties = {
