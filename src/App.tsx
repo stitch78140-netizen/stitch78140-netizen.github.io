@@ -388,20 +388,19 @@ export default function App() {
   }, [out, cleaningInfo]);
 
      const cleaningExplanation = useMemo(() => {
-    if (!cleanStartDT || !out) return null;
+  if (!cleanStartDT || !out) return null;
 
-    const inside = cleaningInfo.insideMin;
-    if (!inside) return null;
+  const inside = cleaningInfo.insideMin;
+  if (!inside) return null;
 
-    const hrMin = cleaningHRMin;
-    const includedMin = Math.max(0, inside - hrMin);
+  const hrMin = cleaningHRMin;
+  const includedMin = Math.max(0, inside - hrMin);
 
-    // 👉 On n'affiche une phrase que si une partie du forfait est
-    // réellement incluse dans l’arrondi (sinon ce serait redondant)
-    if (includedMin <= 0) return null;
+  // On n'affiche rien seulement si tout est à 0
+  if (includedMin <= 0 && hrMin <= 0) return null;
 
-    return { includedMin };
-  }, [cleanStartDT, cleaningInfo.insideMin, cleaningHRMin, out]);
+  return { includedMin, hrMin };
+}, [cleanStartDT, cleaningInfo.insideMin, cleaningHRMin, out]);
 
   /* --- Temps de travail effectif (en minutes) --- */
   const effectiveMin = useMemo(() => {
@@ -841,15 +840,17 @@ export default function App() {
               })()}
             </div>
                         {/* 🔍 Phrase d'explication sur le forfait nettoyage */}
-            {cleaningExplanation && (
-              <div style={{ marginTop: "8px", opacity: 0.8 }}>
-                <strong>🧹 Forfait nettoyage :</strong><br />
-                <div>
-                  {formatMinutes(cleaningExplanation.includedMin)} inclus
-                  dans l’arrondi (ne génère pas d’HS)
-                </div>
-              </div>
-            )}
+{cleaningExplanation && (
+  <div style={{ marginTop: "8px", opacity: 0.8 }}>
+    <strong>🧹 Forfait nettoyage (20 min)</strong><br />
+    {cleaningExplanation.includedMin > 0 && (
+      <div>{formatMinutes(cleaningExplanation.includedMin)} inclus dans l’arrondi</div>
+    )}
+    {cleaningExplanation.hrMin > 0 && (
+      <div>{formatMinutes(cleaningExplanation.hrMin)} HR</div>
+    )}
+  </div>
+)}
             <div style={{ marginTop:8, color:"#b91c1c", fontWeight:600 }}>
               {dayType === "R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
               {dayType === "RH" && "Crédit de 1,5 RCJ ou 2 RCJ + 1 RL au titre du DP sur le RH"}
