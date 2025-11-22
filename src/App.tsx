@@ -459,25 +459,7 @@ export default function App() {
 
       {/* --- Formulaire --- */}
       <div style={{ ...card, display: "grid", gap: 12 }}>
-        {/* Prise de service */}
-        <div>
-          <div style={labelCol}>Prise de service</div>
-          <div style={dateRow}>
-            <input style={inputBase} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
-          </div>
-          <div style={timesRow1pair}>
-            <input
-              style={inputBase}
-              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
-              value={startTime}
-              onChange={e=>setStartTime(formatTypingHHMM(e.target.value))}
-              onBlur={e=>setStartTime(finalizeHHMM(e.target.value))}
-            />
-            <div />
-          </div>
-        </div>
-
-        {/* Nettoyage chambre – REM. COND. LOCAUX HEBERG. (en début de liste, masqué par défaut) */}
+               {/* Nettoyage chambre – REM. COND. LOCAUX HEBERG. (en début de liste, masqué par défaut) */}
         <div>
           <div style={{ ...labelCol, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <label style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -534,6 +516,23 @@ export default function App() {
               )}
             </>
           )}
+        </div>
+        {/* Prise de service */}
+        <div>
+          <div style={labelCol}>Prise de service</div>
+          <div style={dateRow}>
+            <input style={inputBase} type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+          </div>
+          <div style={timesRow1pair}>
+            <input
+              style={inputBase}
+              inputMode="numeric" pattern="[0-9]*" placeholder="HH:MM" maxLength={5}
+              value={startTime}
+              onChange={e=>setStartTime(formatTypingHHMM(e.target.value))}
+              onBlur={e=>setStartTime(finalizeHHMM(e.target.value))}
+            />
+            <div />
+          </div>
         </div>
 
         {/* Fin de service */}
