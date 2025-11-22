@@ -32,6 +32,11 @@ function fmtHM(min: number) {
   const h = Math.floor(min / 60), m = min % 60;
   return `${String(h).padStart(2, "0")}h${String(m).padStart(2, "0")}`;
 }
+function formatMinutes(m: number) {
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${pad(h)}h${pad(mm)}`;
+}
 /** Pendant la frappe : 0–4 chiffres ; ajoute ":" à partir de 3 chiffres. */
 function formatTypingHHMM(raw: string): string {
   const d = raw.replace(/[^\d]/g, "").slice(0, 4);
@@ -383,29 +388,18 @@ export default function App() {
   }, [out, cleaningInfo]);
 
    const cleaningExplanation = useMemo(() => {
-  if (!cleanStartDT) return null;
+  if (!cleanStartDT || !out) return null;
 
-  // minutes dans la vacation
   const inside = cleaningInfo.insideMin;
-  // minutes hors vacation (avant PDS)
-  const before = cleaningInfo.beforeMin;
+  if (!inside) return null;
 
-  // si pas de données ou pas d'output calculé
-  if (!out) return null;
+  const hrMin = cleaningHRMin;
+  const includedMin = Math.max(0, inside - hrMin);
 
-  // On compare le dépassement brut "Bmin + nettoyage" versus le B_total réellement compté
-  // Ce qui a été absorbé dans l'arrondi = inside - HR (HR déjà affichées)
-  const hrCleaning = cleaningInfo.insideMin - Math.min(cleaningInfo.insideMin, out.Bmin_min % 60);
+  if (includedMin <= 0 && hrMin <= 0) return null;
 
-  const included = inside - hrCleaning;
-
-  if (included <= 0 && hrCleaning <= 0) return null;
-
-  return {
-    includedMin: included,
-    hrMin: hrCleaning
-  };
-}, [cleaningInfo, out, cleanStartDT]);
+  return { includedMin, hrMin };
+}, [cleanStartDT, cleaningInfo.insideMin, cleaningHRMin, out]);
 
   /* --- Temps de travail effectif (en minutes) --- */
   const effectiveMin = useMemo(() => {
@@ -844,14 +838,8 @@ export default function App() {
                 );
               })()}
             </div>
-            <div style={{ marginTop:8, color:"#b91c1c", fontWeight:600 }}>
-              {dayType === "R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
-              {dayType === "RH" && "Crédit de 1,5 RCJ ou 2 RCJ + 1 RL au titre du DP sur le RH"}
-            </div>
-          </div>
-        </div>
-      )}
-       {cleaningExplanation && (
+             {/* 🔍 Phrase d'explication sur le forfait nettoyage */}
+             {cleaningExplanation && (
   <div style={{ marginTop: "8px", opacity: 0.8 }}>
     <strong>🧹 Forfait nettoyage :</strong><br/>
 
@@ -868,6 +856,14 @@ export default function App() {
     )}
   </div>
 )}
+            <div style={{ marginTop:8, color:"#b91c1c", fontWeight:600 }}>
+              {dayType === "R"  && "Crédit de 1 RCJ au titre du DP sur le R"}
+              {dayType === "RH" && "Crédit de 1,5 RCJ ou 2 RCJ + 1 RL au titre du DP sur le RH"}
+            </div>
+          </div>
+        </div>
+      )}
+       
 
       {/* Frise */}
       {out && (
